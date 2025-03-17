@@ -1,0 +1,296 @@
+import os
+import scipy.io as sio
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import LeaveOneGroupOut
+from scipy.signal import butter, filtfilt
+
+class EEGDataset(Dataset):
+    def __init__(self, eeg_data, labels):
+        self.eeg_data = eeg_data
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        return (
+            torch.tensor(self.eeg_data[idx], dtype=torch.float32),
+            torch.tensor(self.labels[idx], dtype=torch.long),
+        )
+
+def load_kuleuven_aad_data(data_dir):
+    """
+    Load EEG data and labels from the KULeuven AAD dataset.
+
+    Args:
+        data_dir (str): Path to the dataset directory containing .mat files.
+
+    Returns:
+        subjects_data (list): A list of subjects, where each subject is a dictionary with:
+            - 'trials': A list of dictionaries, each containing:
+                - 'eeg': EEG signals of shape (min_length, features).
+                - 'label': Corresponding label (0 for 'L', 1 for 'R').
+    """
+    subjects_data = []
+    min_length = (6 * 60) * 128  # 6 minutes truncate length (128 Hz)
+
+    for file_name in os.listdir(data_dir):
+        if file_name.endswith(".mat"):
+            file_path = os.path.join(data_dir, file_name)
+            mat_data = sio.loadmat(file_path, struct_as_record=False, squeeze_me=True)
+
+            if 'trials' not in mat_data:
+                print(f"Skipping {file_name}: 'trials' key not found.")
+                continue
+
+            trials = mat_data['trials']
+            if not isinstance(trials, (list, np.ndarray)):
+                trials = [trials]  # Ensure trials is iterable
+
+            subject_trials = []
+
+            for trial in trials:
+                # Skip the last 12 trials (experiment 3, repeated segments)
+                if trial.TrialID == 9:
+                    break
+
+                label_char = getattr(trial, 'attended_ear', None)
+                raw_data = getattr(trial, 'RawData', None)
+
+                if label_char not in ('L', 'R') or raw_data is None:
+                    print(f"Skipping trial in {file_name}: Missing 'attended_ear' or 'RawData'.")
+                    continue
+
+                eeg_data = getattr(raw_data, 'EegData', None)
+                if eeg_data is None or not isinstance(eeg_data, np.ndarray) or eeg_data.ndim != 2:
+                    print(f"Skipping trial in {file_name}: Invalid 'EegData' format.")
+                    continue
+
+                # Truncate EEG data
+                eeg_data_truncated = eeg_data[:min_length]
+
+                subject_trials.append({
+                    'eeg': eeg_data_truncated.astype(np.float32),
+                    'label': 1 if label_char == 'R' else 0
+                })
+
+            if subject_trials:
+                subjects_data.append({'name': file_name, 'trials': subject_trials})
+
+    if not subjects_data:
+        raise ValueError("No valid EEG data found.")
+
+    return subjects_data
+
+def segment_eeg_data(trial, window_size=128, overlap=0.5):
+    """
+    Segments EEG data with overlap per trial.
+    
+    Args:
+        eeg_data (numpy array): Shape (num_trials, time_steps, num_channels)
+        labels (numpy array): Shape (num_trials,)
+        window_size (int): Number of time steps in each segment
+        overlap (float): Overlap percentage (0.5 = 50%)
+    
+    Returns:
+        segmented_data (numpy array): Segmented EEG data
+        segmented_labels (numpy array): Corresponding labels
+    """
+    step_size = int(window_size * (1 - overlap))  # Calculate step size for sliding window
+    segmented_data = []
+    segmented_labels = []
+    trial_data = trial['eeg']
+
+    # Create sliding windows
+    for start in range(0, trial_data.shape[0] - window_size + 1, step_size):
+        end = start + window_size
+        segment = trial_data[start:end, :]
+        segmented_data.append(segment)
+
+    return np.array(segmented_data)
+
+def bandpass_filter(data, lowcut, highcut, fs, order=4):
+    """
+    Apply a bandpass filter to the EEG data.
+    :param data: EEG data (2D or 3D array).
+    :param lowcut: Lower frequency cutoff (Hz).
+    :param highcut: Upper frequency cutoff (Hz).
+    :param fs: Sampling frequency (Hz).
+    :param order: Order of the filter.
+    :return: Filtered data.
+    """
+    # Design the filter
+    nyquist = 0.5 * fs
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+    
+    # Apply the filter to each channel in the EEG data
+    if len(data.shape) == 3:  # (samples, time_steps, channels)
+        filtered_data = np.zeros_like(data)
+        for i in range(data.shape[0]):  # Iterate over samples
+            for j in range(data.shape[2]):  # Iterate over channels
+                filtered_data[i, :, j] = filtfilt(b, a, data[i, :, j])
+    else:  # 2D data (time_steps, channels)
+        filtered_data = np.zeros_like(data)
+        for j in range(data.shape[1]):  # Iterate over channels
+            filtered_data[:, j] = filtfilt(b, a, data[:, j])
+    
+    return filtered_data
+
+
+def preprocess(subjects):
+    # Preprocess the data
+    scaler = StandardScaler()
+    for subject in subjects:
+        trials = subject['trials']  # Get the list of trials
+        subject_name = subject['name']
+        print(f"Processing Subject: {subject_name}, Number of trials: {len(trials)}")
+
+        # Iterate over each trial in the subject
+        for trial in trials:
+            eeg_data = trial['eeg']  # EEG data (NumPy array)
+            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
+            trial['eeg'] = scaler.fit_transform(trial['eeg'])
+            trial['eeg'] = segment_eeg_data(trial)
+        
+    
+    return subjects
+    
+# -----------------------------
+# Neural Network Model
+# -----------------------------
+class EEGNet(nn.Module):
+    def __init__(self, num_channels, num_timesteps, num_classes):
+        super(EEGNet, self).__init__()
+        
+        # Convolutional Layer to extract spatial and temporal features
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1)
+        self.batchnorm1 = nn.BatchNorm2d(16)
+
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1)
+        self.batchnorm2 = nn.BatchNorm2d(32)
+        
+        # Activation
+        self.relu = nn.ReLU()
+        
+        # Pooling layer to reduce dimensions
+        self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        
+        # Fully connected layer for classification
+        self.fc1 = nn.Linear(32 * (num_timesteps // 4) * (num_channels // 4), 64)  # Adjust dimensions after pooling
+        self.fc2 = nn.Linear(64, num_classes)
+        
+        # Dropout for regularization
+        # self.dropout = nn.Dropout(0.3)
+
+    def forward(self, x):
+        # Convolutional layers
+        x = self.pool(self.relu(self.batchnorm1(self.conv1(x))))
+        x = self.pool(self.relu(self.batchnorm2(self.conv2(x))))
+        
+        # fully connected layers
+        x = x.view(x.size(0), -1)  # Flatten for FC layer
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+
+
+if __name__ == "__main__":
+    data_dir = "./KUL"  # Update with actual dataset path
+    print(torch.__version__)
+    print("Loading KULeuven AAD data...")
+    try:
+        subjects_data = load_kuleuven_aad_data(data_dir)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load data: {e}")
+
+    print(f"Loaded {len(subjects_data)} subjects.")
+
+    subjects_data = preprocess(subjects_data)
+
+    # Prepare data for cross-validation
+    X, y, groups = [], [], []
+
+    for i, subject in enumerate(subjects_data):
+        for trial in subject['trials']:
+            eeg_windows = trial['eeg']  # Shape: (windows, time_steps, channels)
+            num_windows = eeg_windows.shape[0]  # Get number of windows
+
+            # Reshape each window to (1, time_steps, channels) and add to X
+            for window in eeg_windows:
+                X.append(window[np.newaxis, :, :])  # Add a new axis for channel dim
+
+            # Repeat the label for each window
+            y.extend([trial['label']] * num_windows)
+
+            # Repeat the subject index for each window
+            groups.extend([i] * num_windows)
+
+    # Convert to NumPy arrays
+    X = np.array(X)  # Shape: (total_windows, 1, time_steps, channels)
+    y = np.array(y)  # labels for each window
+    groups = np.array(groups) # subject index for each window
+    print(X.shape, y.shape, len(groups))
+
+    # leave one subject out cross-validation
+    logo = LeaveOneGroupOut()
+    epochs = 10
+
+    for train_idx, test_idx in logo.split(X, y, groups):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
+        print(X_train.shape, X_test.shape)
+        print(y_train.shape, y_test.shape)
+        
+        train_dataset = EEGDataset(X_train, y_train)
+        test_dataset = EEGDataset(X_test, y_test)
+        num_channels = X_train.shape[3]
+        num_timesteps = X_train.shape[2]
+
+        train_loader = DataLoader(train_dataset, batch_size=30, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=30, shuffle=False)
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = EEGNet(num_channels=num_channels, num_timesteps=num_timesteps, num_classes=2).to(device)
+
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+        # Training loop
+        for epoch in range(epochs):
+            model.train()
+            for X_batch, y_batch in train_loader:
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                optimizer.zero_grad()
+                outputs = model(X_batch).squeeze()
+                loss = criterion(outputs, y_batch)
+                loss.backward()
+                optimizer.step()
+            
+            print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+        
+        # Evaluation
+        model.eval()
+        correct, total_loss = 0, 0
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+
+                total_loss += loss.item() * inputs.size(0)
+                correct += (outputs.argmax(dim=1) == labels).sum().item()
+                accuracy = correct / len(test_loader.dataset)
+        
+        print(f"Test Subject: {set(groups[i] for i in test_idx)}, Accuracy: {accuracy}%\n")
+
+
+
