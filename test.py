@@ -175,6 +175,7 @@ def preprocess_data(eeg_signals, labels):
     X_train, X_test, y_train, y_test = train_test_split(
         segmented_data, segmented_labels, test_size=0.2, stratify=segmented_labels
     )
+    print(X_train.shape, X_test.shape)
 
     # Convert to PyTorch datasets
     return EEGDataset(X_train, y_train), EEGDataset(X_test, y_test)
@@ -278,6 +279,7 @@ if __name__ == "__main__":
     print("shape timesteps: ", num_timesteps)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model = EEGNet(num_channels=num_channels, num_timesteps=num_timesteps, num_classes=2).to(device)
 
     criterion = nn.CrossEntropyLoss()
