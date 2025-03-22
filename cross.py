@@ -164,6 +164,7 @@ def preprocess(subjects):
 # -----------------------------
 # Neural Network Models
 # -----------------------------
+# 2 convolutional layer
 class EEGNet(nn.Module):
     def __init__(self, num_channels, num_timesteps, num_classes):
         super(EEGNet, self).__init__()
@@ -217,6 +218,7 @@ class EEGNet(nn.Module):
         x = self.fc2(x)
         return x
 
+# 3 convolutional layer
 class EEGNet2(nn.Module):
     def __init__(self, num_classes=2, num_channels=64, input_size=128):
         """
@@ -253,6 +255,8 @@ class EEGNet2(nn.Module):
         self.fc = nn.Linear(128 * (input_size // 8) * (num_channels // 8), 256)
         self.fc2 = nn.Linear(256, num_classes)
 
+        self.dropout = nn.Dropout(0.3)  # Dropout after first convolutional layers
+
     def forward(self, x):
         x = x.unsqueeze(1) # change shape -> (batch_size, 1, num_timesteps, num_channels)
 
@@ -260,10 +264,12 @@ class EEGNet2(nn.Module):
         x = self.pool(F.relu(self.batch_norm1(self.conv1(x))))
         x = self.pool(F.relu(self.batch_norm2(self.conv2(x))))
         x = self.pool(F.relu(self.batch_norm3(self.conv3(x))))
-
+        x = self.dropout(x)
+        
         # fully connected layers
         x = x.view(x.size(0), -1) # flatten
         x = F.relu(self.fc(x))
+        x = self.dropout(x)
         x = self.fc2(x)
         return x
 
@@ -341,14 +347,13 @@ if __name__ == "__main__":
 
     # leave one subject out cross-validation
     logo = LeaveOneGroupOut()
-    epochs = 20
+    epochs = 10
 
     for train_idx, test_idx in logo.split(X, y, groups):
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
         print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
         print(X_train.shape, X_test.shape)
-        print(y_train.shape, y_test.shape)
         print(np.bincount(y_train))
 
         train_dataset = EEGDataset(X_train, y_train)
@@ -364,7 +369,7 @@ if __name__ == "__main__":
         model = EEGNet2(num_classes=2, num_channels=64, input_size=128).to(device)
 
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        optimizer = optim.Adam(model.parameters(), lr=0.0003)
 
         # Training loop
         for epoch in range(epochs):

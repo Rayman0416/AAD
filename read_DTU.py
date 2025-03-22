@@ -34,6 +34,11 @@ if __name__ == "__main__":
     print(type(expinfo))
     print(expinfo.shape)
     print(expinfo.dtype.names)
+    print(expinfo['trigger'][0])
+    print(expinfo['trigger'][0].item())
+    value = expinfo['trigger'][0].item()
+    print(expinfo['trigger'][0][0])
+    print(value)
 
     names = expinfo.dtype.names
     first_name = names[0]
