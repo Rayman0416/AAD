@@ -1,3 +1,5 @@
+KUL Dataset EEGNet model 2
+
 (92032, 128, 64) (92032,) 92032
 Test subject(fold): {0}
 (86280, 128, 64) (5752, 128, 64)
@@ -195,9 +197,6 @@ Epoch 9/10 | Train Loss: 0.1777, Train Acc: 0.9197
 Epoch 10/10 | Train Loss: 0.1711, Train Acc: 0.9233
 Test Loss: 0.2014, Test Acc: 0.9221
 Test subject(fold): {13}
-(86280, 128, 64) (5752, 128, 64)
-(86280,) (5752,)
-[43140 43140]
 Epoch 1/10 | Train Loss: 0.4793, Train Acc: 0.7452
 Epoch 2/10 | Train Loss: 0.3048, Train Acc: 0.8559
 Epoch 3/10 | Train Loss: 0.2523, Train Acc: 0.8852
@@ -210,9 +209,6 @@ Epoch 9/10 | Train Loss: 0.1512, Train Acc: 0.9350
 Epoch 10/10 | Train Loss: 0.1434, Train Acc: 0.9394
 Test Loss: 0.5875, Test Acc: 0.7227
 Test subject(fold): {14}
-(86280, 128, 64) (5752, 128, 64)
-(86280,) (5752,)
-[43140 43140]
 Epoch 1/10 | Train Loss: 0.4696, Train Acc: 0.7508
 Epoch 2/10 | Train Loss: 0.2958, Train Acc: 0.8611
 Epoch 3/10 | Train Loss: 0.2593, Train Acc: 0.8812
@@ -225,9 +221,6 @@ Epoch 9/10 | Train Loss: 0.1630, Train Acc: 0.9269
 Epoch 10/10 | Train Loss: 0.1535, Train Acc: 0.9306
 Test Loss: 1.4621, Test Acc: 0.6570
 Test subject(fold): {15}
-(86280, 128, 64) (5752, 128, 64)
-(86280,) (5752,)
-[43140 43140]
 Epoch 1/10 | Train Loss: 0.4714, Train Acc: 0.7560
 Epoch 2/10 | Train Loss: 0.3194, Train Acc: 0.8471
 Epoch 3/10 | Train Loss: 0.2785, Train Acc: 0.8710
@@ -239,3 +232,262 @@ Epoch 8/10 | Train Loss: 0.1873, Train Acc: 0.9189
 Epoch 9/10 | Train Loss: 0.1751, Train Acc: 0.9255
 Epoch 10/10 | Train Loss: 0.1703, Train Acc: 0.9268
 Test Loss: 2.6058, Test Acc: 0.5382
+
+
+
+
+DTU Dataset EEGNet model 2
+
+
+Test subject(fold): {0}
+(49980, 128, 66) (2940, 128, 66)
+[25088 24892]
+Epoch 1/10 | Train Loss: 0.7006, Train Acc: 0.5023
+Epoch 2/10 | Train Loss: 0.6932, Train Acc: 0.5004
+Epoch 3/10 | Train Loss: 0.6932, Train Acc: 0.5020
+Epoch 4/10 | Train Loss: 0.6932, Train Acc: 0.5023
+Epoch 5/10 | Train Loss: 0.6932, Train Acc: 0.4976
+Epoch 6/10 | Train Loss: 0.6932, Train Acc: 0.5005
+Epoch 7/10 | Train Loss: 0.6932, Train Acc: 0.5014
+Epoch 8/10 | Train Loss: 0.6932, Train Acc: 0.5016
+Epoch 9/10 | Train Loss: 0.6931, Train Acc: 0.5010
+Epoch 10/10 | Train Loss: 0.6932, Train Acc: 0.5020
+Test Loss: 0.6943, Test Acc: 0.3667
+Test subject(fold): {1}
+(49980, 128, 66) (2940, 128, 66)
+[24598 25382]
+Epoch 1/10 | Train Loss: 0.7029, Train Acc: 0.5230
+Epoch 2/10 | Train Loss: 0.6761, Train Acc: 0.5633
+Epoch 3/10 | Train Loss: 0.6572, Train Acc: 0.6016
+Epoch 4/10 | Train Loss: 0.6396, Train Acc: 0.6214
+Epoch 5/10 | Train Loss: 0.6222, Train Acc: 0.6412
+Epoch 6/10 | Train Loss: 0.6086, Train Acc: 0.6541
+Epoch 7/10 | Train Loss: 0.5942, Train Acc: 0.6685
+Epoch 8/10 | Train Loss: 0.5812, Train Acc: 0.6819
+Epoch 9/10 | Train Loss: 0.5666, Train Acc: 0.6960
+Epoch 10/10 | Train Loss: 0.5498, Train Acc: 0.7132
+Test Loss: 0.7334, Test Acc: 0.5503
+Test subject(fold): {2}
+(49980, 128, 66) (2940, 128, 66)
+[24500 25480]
+Epoch 1/10 | Train Loss: 0.7003, Train Acc: 0.5121
+Epoch 2/10 | Train Loss: 0.6863, Train Acc: 0.5370
+Epoch 3/10 | Train Loss: 0.6799, Train Acc: 0.5506
+Epoch 4/10 | Train Loss: 0.6719, Train Acc: 0.5677
+Epoch 5/10 | Train Loss: 0.6601, Train Acc: 0.5867
+Epoch 6/10 | Train Loss: 0.6474, Train Acc: 0.6045
+Epoch 7/10 | Train Loss: 0.6367, Train Acc: 0.6170
+Epoch 8/10 | Train Loss: 0.6296, Train Acc: 0.6248
+Epoch 9/10 | Train Loss: 0.6191, Train Acc: 0.6351
+Epoch 10/10 | Train Loss: 0.6120, Train Acc: 0.6426
+Test Loss: 0.7065, Test Acc: 0.5384
+Test subject(fold): {3}
+(49980, 128, 66) (2940, 128, 66)
+[24696 25284]
+Epoch 1/10 | Train Loss: 0.6988, Train Acc: 0.5160
+Epoch 2/10 | Train Loss: 0.6837, Train Acc: 0.5477
+Epoch 3/10 | Train Loss: 0.6722, Train Acc: 0.5686
+Epoch 4/10 | Train Loss: 0.6567, Train Acc: 0.5958
+Epoch 5/10 | Train Loss: 0.6402, Train Acc: 0.6167
+Epoch 6/10 | Train Loss: 0.6314, Train Acc: 0.6255
+Epoch 7/10 | Train Loss: 0.6239, Train Acc: 0.6347
+Epoch 8/10 | Train Loss: 0.6164, Train Acc: 0.6424
+Epoch 9/10 | Train Loss: 0.6094, Train Acc: 0.6478
+Epoch 10/10 | Train Loss: 0.5988, Train Acc: 0.6597
+Test Loss: 0.7095, Test Acc: 0.5095
+Test subject(fold): {4}
+(49980, 128, 66) (2940, 128, 66)
+[24990 24990]
+Epoch 1/10 | Train Loss: 0.7009, Train Acc: 0.5158
+Epoch 2/10 | Train Loss: 0.6807, Train Acc: 0.5414
+Epoch 3/10 | Train Loss: 0.6675, Train Acc: 0.5738
+Epoch 4/10 | Train Loss: 0.6508, Train Acc: 0.5933
+Epoch 5/10 | Train Loss: 0.6332, Train Acc: 0.6176
+Epoch 6/10 | Train Loss: 0.6186, Train Acc: 0.6351
+Epoch 7/10 | Train Loss: 0.6065, Train Acc: 0.6517
+Epoch 8/10 | Train Loss: 0.5914, Train Acc: 0.6691
+Epoch 9/10 | Train Loss: 0.5791, Train Acc: 0.6781
+Epoch 10/10 | Train Loss: 0.5701, Train Acc: 0.6867
+Test Loss: 0.7331, Test Acc: 0.4558
+Test subject(fold): {5}
+(49980, 128, 66) (2940, 128, 66)
+[24402 25578]
+Epoch 1/10 | Train Loss: 0.7007, Train Acc: 0.5136
+Epoch 2/10 | Train Loss: 0.6900, Train Acc: 0.5177
+Epoch 3/10 | Train Loss: 0.6924, Train Acc: 0.5118
+Epoch 4/10 | Train Loss: 0.6918, Train Acc: 0.5116
+Epoch 5/10 | Train Loss: 0.6822, Train Acc: 0.5422
+Epoch 6/10 | Train Loss: 0.6725, Train Acc: 0.5660
+Epoch 7/10 | Train Loss: 0.6601, Train Acc: 0.5927
+Epoch 8/10 | Train Loss: 0.6452, Train Acc: 0.6191
+Epoch 9/10 | Train Loss: 0.6286, Train Acc: 0.6393
+Epoch 10/10 | Train Loss: 0.6172, Train Acc: 0.6534
+Test Loss: 0.6761, Test Acc: 0.5986
+Test subject(fold): {6}
+(49980, 128, 66) (2940, 128, 66)
+[24402 25578]
+Epoch 1/10 | Train Loss: 0.7007, Train Acc: 0.5093
+Epoch 2/10 | Train Loss: 0.6894, Train Acc: 0.5175
+Epoch 3/10 | Train Loss: 0.6846, Train Acc: 0.5390
+Epoch 4/10 | Train Loss: 0.6790, Train Acc: 0.5510
+Epoch 5/10 | Train Loss: 0.6663, Train Acc: 0.5765
+Epoch 6/10 | Train Loss: 0.6539, Train Acc: 0.5964
+Epoch 7/10 | Train Loss: 0.6447, Train Acc: 0.6067
+Epoch 8/10 | Train Loss: 0.6357, Train Acc: 0.6170
+Epoch 9/10 | Train Loss: 0.6287, Train Acc: 0.6229
+Epoch 10/10 | Train Loss: 0.6179, Train Acc: 0.6358
+Test Loss: 1.9565, Test Acc: 0.4007
+Test subject(fold): {7}
+(49980, 128, 66) (2940, 128, 66)
+[24304 25676]
+Epoch 1/10 | Train Loss: 0.7033, Train Acc: 0.5197
+Epoch 2/10 | Train Loss: 0.6794, Train Acc: 0.5405
+Epoch 3/10 | Train Loss: 0.6660, Train Acc: 0.5505
+Epoch 4/10 | Train Loss: 0.6496, Train Acc: 0.5807
+Epoch 5/10 | Train Loss: 0.6356, Train Acc: 0.6025
+Epoch 6/10 | Train Loss: 0.6214, Train Acc: 0.6213
+Epoch 7/10 | Train Loss: 0.6063, Train Acc: 0.6404
+Epoch 8/10 | Train Loss: 0.5890, Train Acc: 0.6622
+Epoch 9/10 | Train Loss: 0.5715, Train Acc: 0.6805
+Epoch 10/10 | Train Loss: 0.5606, Train Acc: 0.6899
+Test Loss: 0.7194, Test Acc: 0.5881
+Test subject(fold): {8}
+(49980, 128, 66) (2940, 128, 66)
+[24892 25088]
+Epoch 1/10 | Train Loss: 0.7011, Train Acc: 0.4986
+Epoch 2/10 | Train Loss: 0.6930, Train Acc: 0.4979
+Epoch 3/10 | Train Loss: 0.6904, Train Acc: 0.5041
+Epoch 4/10 | Train Loss: 0.6891, Train Acc: 0.5124
+Epoch 5/10 | Train Loss: 0.6794, Train Acc: 0.5608
+Epoch 6/10 | Train Loss: 0.6667, Train Acc: 0.5885
+Epoch 7/10 | Train Loss: 0.6558, Train Acc: 0.6058
+Epoch 8/10 | Train Loss: 0.6430, Train Acc: 0.6221
+Epoch 9/10 | Train Loss: 0.6308, Train Acc: 0.6370
+Epoch 10/10 | Train Loss: 0.6178, Train Acc: 0.6508
+Test Loss: 0.7642, Test Acc: 0.4381
+Test subject(fold): {9}
+(49980, 128, 66) (2940, 128, 66)
+[24598 25382]
+Epoch 1/10 | Train Loss: 0.6924, Train Acc: 0.5274
+Epoch 2/10 | Train Loss: 0.6650, Train Acc: 0.5788
+Epoch 3/10 | Train Loss: 0.6293, Train Acc: 0.6142
+Epoch 4/10 | Train Loss: 0.6002, Train Acc: 0.6530
+Epoch 5/10 | Train Loss: 0.5787, Train Acc: 0.6736
+Epoch 6/10 | Train Loss: 0.5597, Train Acc: 0.6902
+Epoch 7/10 | Train Loss: 0.5414, Train Acc: 0.7074
+Epoch 8/10 | Train Loss: 0.5238, Train Acc: 0.7185
+Epoch 9/10 | Train Loss: 0.5099, Train Acc: 0.7284
+Epoch 10/10 | Train Loss: 0.4915, Train Acc: 0.7426
+Test Loss: 0.9212, Test Acc: 0.4701
+Test subject(fold): {10}
+(49980, 128, 66) (2940, 128, 66)
+[24794 25186]
+Epoch 1/10 | Train Loss: 0.6977, Train Acc: 0.5242
+Epoch 2/10 | Train Loss: 0.6747, Train Acc: 0.5619
+Epoch 3/10 | Train Loss: 0.6496, Train Acc: 0.6033
+Epoch 4/10 | Train Loss: 0.6288, Train Acc: 0.6261
+Epoch 5/10 | Train Loss: 0.6098, Train Acc: 0.6515
+Epoch 6/10 | Train Loss: 0.5907, Train Acc: 0.6694
+Epoch 7/10 | Train Loss: 0.5756, Train Acc: 0.6809
+Epoch 8/10 | Train Loss: 0.5596, Train Acc: 0.6962
+Epoch 9/10 | Train Loss: 0.5467, Train Acc: 0.7047
+Epoch 10/10 | Train Loss: 0.5289, Train Acc: 0.7169
+Test Loss: 0.7249, Test Acc: 0.4810
+Test subject(fold): {11}
+(49980, 128, 66) (2940, 128, 66)
+[24500 25480]
+Epoch 1/10 | Train Loss: 0.6956, Train Acc: 0.5248
+Epoch 2/10 | Train Loss: 0.6698, Train Acc: 0.5804
+Epoch 3/10 | Train Loss: 0.6362, Train Acc: 0.6270
+Epoch 4/10 | Train Loss: 0.6098, Train Acc: 0.6478
+Epoch 5/10 | Train Loss: 0.5891, Train Acc: 0.6703
+Epoch 6/10 | Train Loss: 0.5697, Train Acc: 0.6846
+Epoch 7/10 | Train Loss: 0.5523, Train Acc: 0.6983
+Epoch 8/10 | Train Loss: 0.5367, Train Acc: 0.7103
+Epoch 9/10 | Train Loss: 0.5194, Train Acc: 0.7268
+Epoch 10/10 | Train Loss: 0.5044, Train Acc: 0.7355
+Test Loss: 0.8576, Test Acc: 0.4823
+Test subject(fold): {12}
+(49980, 128, 66) (2940, 128, 66)
+[24696 25284]
+Epoch 1/10 | Train Loss: 0.7000, Train Acc: 0.5211
+Epoch 2/10 | Train Loss: 0.6803, Train Acc: 0.5660
+Epoch 3/10 | Train Loss: 0.6617, Train Acc: 0.5978
+Epoch 4/10 | Train Loss: 0.6469, Train Acc: 0.6197
+Epoch 5/10 | Train Loss: 0.6360, Train Acc: 0.6297
+Epoch 6/10 | Train Loss: 0.6245, Train Acc: 0.6434
+Epoch 7/10 | Train Loss: 0.6165, Train Acc: 0.6507
+Epoch 8/10 | Train Loss: 0.6094, Train Acc: 0.6564
+Epoch 9/10 | Train Loss: 0.5984, Train Acc: 0.6677
+Epoch 10/10 | Train Loss: 0.5949, Train Acc: 0.6696
+Test Loss: 0.7389, Test Acc: 0.4990
+Test subject(fold): {13}
+(49980, 128, 66) (2940, 128, 66)
+[24696 25284]
+Epoch 1/10 | Train Loss: 0.6996, Train Acc: 0.5246
+Epoch 2/10 | Train Loss: 0.6836, Train Acc: 0.5523
+Epoch 3/10 | Train Loss: 0.6712, Train Acc: 0.5785
+Epoch 4/10 | Train Loss: 0.6558, Train Acc: 0.6039
+Epoch 5/10 | Train Loss: 0.6369, Train Acc: 0.6337
+Epoch 6/10 | Train Loss: 0.6220, Train Acc: 0.6500
+Epoch 7/10 | Train Loss: 0.6078, Train Acc: 0.6654
+Epoch 8/10 | Train Loss: 0.5953, Train Acc: 0.6753
+Epoch 9/10 | Train Loss: 0.5817, Train Acc: 0.6899
+Epoch 10/10 | Train Loss: 0.5718, Train Acc: 0.7006
+Test Loss: 0.7234, Test Acc: 0.5303
+Test subject(fold): {14}
+(49980, 128, 66) (2940, 128, 66)
+[25186 24794]
+Epoch 1/10 | Train Loss: 0.7055, Train Acc: 0.5224
+Epoch 2/10 | Train Loss: 0.6816, Train Acc: 0.5384
+Epoch 3/10 | Train Loss: 0.6682, Train Acc: 0.5678
+Epoch 4/10 | Train Loss: 0.6499, Train Acc: 0.5932
+Epoch 5/10 | Train Loss: 0.6347, Train Acc: 0.6132
+Epoch 6/10 | Train Loss: 0.6218, Train Acc: 0.6259
+Epoch 7/10 | Train Loss: 0.6119, Train Acc: 0.6391
+Epoch 8/10 | Train Loss: 0.5958, Train Acc: 0.6605
+Epoch 9/10 | Train Loss: 0.5803, Train Acc: 0.6755
+Epoch 10/10 | Train Loss: 0.5636, Train Acc: 0.6918
+Test Loss: 0.7879, Test Acc: 0.5415
+Test subject(fold): {15}
+(49980, 128, 66) (2940, 128, 66)
+[24990 24990]
+Epoch 1/10 | Train Loss: 0.7006, Train Acc: 0.5116
+Epoch 2/10 | Train Loss: 0.6863, Train Acc: 0.5254
+Epoch 3/10 | Train Loss: 0.6781, Train Acc: 0.5382
+Epoch 4/10 | Train Loss: 0.6730, Train Acc: 0.5453
+Epoch 5/10 | Train Loss: 0.6687, Train Acc: 0.5500
+Epoch 6/10 | Train Loss: 0.6653, Train Acc: 0.5533
+Epoch 7/10 | Train Loss: 0.6628, Train Acc: 0.5555
+Epoch 8/10 | Train Loss: 0.6605, Train Acc: 0.5578
+Epoch 9/10 | Train Loss: 0.6571, Train Acc: 0.5613
+Epoch 10/10 | Train Loss: 0.6558, Train Acc: 0.5626
+Test Loss: 1.1041, Test Acc: 0.4599
+Test subject(fold): {16}
+(49980, 128, 66) (2940, 128, 66)
+[24696 25284]
+Epoch 1/10 | Train Loss: 0.7009, Train Acc: 0.5196
+Epoch 2/10 | Train Loss: 0.6819, Train Acc: 0.5356
+Epoch 3/10 | Train Loss: 0.6713, Train Acc: 0.5538
+Epoch 4/10 | Train Loss: 0.6543, Train Acc: 0.5810
+Epoch 5/10 | Train Loss: 0.6414, Train Acc: 0.5982
+Epoch 6/10 | Train Loss: 0.6273, Train Acc: 0.6215
+Epoch 7/10 | Train Loss: 0.6169, Train Acc: 0.6342
+Epoch 8/10 | Train Loss: 0.6041, Train Acc: 0.6485
+Epoch 9/10 | Train Loss: 0.5933, Train Acc: 0.6622
+Epoch 10/10 | Train Loss: 0.5793, Train Acc: 0.6766
+Test Loss: 0.6441, Test Acc: 0.6510
+Test subject(fold): {17}
+(49980, 128, 66) (2940, 128, 66)
+[24794 25186]
+Epoch 1/10 | Train Loss: 0.7031, Train Acc: 0.5215
+Epoch 2/10 | Train Loss: 0.6836, Train Acc: 0.5445
+Epoch 3/10 | Train Loss: 0.6709, Train Acc: 0.5670
+Epoch 4/10 | Train Loss: 0.6611, Train Acc: 0.5845
+Epoch 5/10 | Train Loss: 0.6517, Train Acc: 0.5995
+Epoch 6/10 | Train Loss: 0.6428, Train Acc: 0.6072
+Epoch 7/10 | Train Loss: 0.6315, Train Acc: 0.6217
+Epoch 8/10 | Train Loss: 0.6244, Train Acc: 0.6301
+Epoch 9/10 | Train Loss: 0.6127, Train Acc: 0.6471
+Epoch 10/10 | Train Loss: 0.6028, Train Acc: 0.6586
+Test Loss: 0.8454, Test Acc: 0.4653

@@ -310,7 +310,7 @@ def evaluate(model, dataloader, criterion, device):
 
 if __name__ == "__main__":
     data_dir = "./KUL"  # Update with actual dataset path
-    print(torch.__version__)
+    
     print("Loading KULeuven AAD data...")
     try:
         subjects_data = load_kuleuven_aad_data(data_dir)
