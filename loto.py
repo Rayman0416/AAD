@@ -27,8 +27,7 @@ class EEGDataset(Dataset):
             torch.tensor(self.eeg_data[idx], dtype=torch.float32),
             torch.tensor(self.labels[idx], dtype=torch.long),
         )
-    
-# Load in first 8 trials of eeg data for each subject and extract 2D electrode coordinates
+
 def load_kuleuven_aad_data(data_dir):
     """
     Load EEG data and labels from the KULeuven AAD dataset.
@@ -43,7 +42,6 @@ def load_kuleuven_aad_data(data_dir):
                 - 'label': Corresponding label (0 for 'L', 1 for 'R').
     """
     subjects_data = []
-    channel_names = []
     min_length = (6 * 60) * 128  # 6 minutes truncate length (128 Hz)
 
     for file_name in os.listdir(data_dir):
@@ -59,15 +57,8 @@ def load_kuleuven_aad_data(data_dir):
             if not isinstance(trials, (list, np.ndarray)):
                 trials = [trials]  # Ensure trials is iterable
 
-            # get channel position names
-            if len(channel_names) == 0:
-                trial = trials[0]
-                file_header = trial.FileHeader
-                channels = file_header.Channels
-                for channel in channels:
-                    channel_names.append(channel.Label)
-
             subject_trials = []
+
             for trial in trials:
                 # Skip the last 12 trials (experiment 3, repeated segments)
                 if trial.TrialID == 9:
@@ -96,20 +87,10 @@ def load_kuleuven_aad_data(data_dir):
             if subject_trials:
                 subjects_data.append({'name': file_name, 'trials': subject_trials})
 
-    # get electrode positions from the channel names
-    montage = mne.channels.make_standard_montage("standard_1020")
-    electrode_positions = {}
-    for ch in channel_names:
-        if ch in montage.ch_names:
-            electrode_positions[ch] = montage.get_positions()["ch_pos"][ch]
-
-    # Transform the 3D coordinates to the 2D plane
-    electrode_positions = azimuthal_equidistant_proj(electrode_positions)
-
     if not subjects_data:
         raise ValueError("No valid EEG data found.")
 
-    return subjects_data, electrode_positions, channel_names
+    return subjects_data
 
 def segment_eeg_data(trial, window_size=128, overlap=0.5):
     """
@@ -167,130 +148,21 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     
     return filtered_data
 
-# Compute the alpha power band (8-13 hz) by taking the sum of average absolute squared value for each channel
-def compute_alpha_power(eeg_data, sfreq=128):
-    """
-    Compute alpha band (8-13 Hz) power for EEG data
-    Args:
-        eeg_data: (n_samples, n_timesteps, n_channels)
-        sfreq: Sampling frequency (Hz)
-    Returns:
-        alpha_power: (n_samples, n_channels)
-    """
-    n_samples, n_timesteps, n_channels = eeg_data.shape
-    
-    # Compute FFT and power spectrum
-    fft_vals = np.abs(fft(eeg_data, axis=1)) ** 2
-    freqs = fftfreq(n_timesteps, 1/sfreq)
-    
-    # Use only positive frequencies
-    positive_freqs = freqs[:n_timesteps//2]
-    fft_vals = fft_vals[:, :n_timesteps//2, :]
-    
-    # Sum power in alpha band (8-13 Hz)
-    alpha_mask = (positive_freqs >= 8) & (positive_freqs <= 13)
-    alpha_power = np.sum(fft_vals[:, alpha_mask, :], axis=1)
-    
-    return alpha_power
-
 # z-score channel-wise normalization
 def normalize_data(eeg_data):
     mean = np.mean(eeg_data, axis=0)
     std = np.std(eeg_data, axis=0)
     return (eeg_data - mean) / std
 
-# Maps 3D EEG electrode positions to a 2D plane using Azimuthal Equidistant Projection.
-def azimuthal_equidistant_proj(electrode_positions, center="Cz"):
-    # Get center electrode position (e.g., Cz as reference)
-    center_pos = np.array(electrode_positions[center])
-    
-    projected_2d = {}
-    
-    for elec, pos in electrode_positions.items():
-        pos = np.array(pos)
-        
-        # Compute geodesic distance from center electrode
-        d = distance.euclidean(pos, center_pos)
-        
-        # Compute azimuthal angle
-        theta = np.arctan2(pos[1], pos[0])  # atan2(y, x) for angle
-        
-        # Apply projection formulas
-        X = d * np.cos(theta)
-        Y = d * np.sin(theta)
-        
-        projected_2d[elec] = (X, Y)
-    
-    return projected_2d
-
-# Create a 2D topological map (grid_resolution, grid_resolution) from channel values and positions
-def create_topo_map(channel_values, electrode_positions, channel_names, grid_resolution=64):
-    """
-    Create 2D topological maps using azimuthal equidistant projection
-    
-    Args:
-        channel_values: 1D array of alpha power values (64,)
-        electrode_positions_3d: Dictionary of 3D electrode positions {name: [x,y,z]}
-        channel_names: List of channel names in order of channel_values
-        center_ch: Name of center channel for projection
-        grid_resolution: Size of output 2D map
-        
-    Returns:
-        2D topological map (grid_resolution, grid_resolution)
-    """
-    
-    # Prepare coordinates and values for interpolation
-    x, y, values = [], [], []
-    for ch_name, val in zip(channel_names, channel_values):
-        if ch_name in electrode_positions:
-            x.append(electrode_positions[ch_name][0])
-            y.append(electrode_positions[ch_name][1])
-            values.append(val)
-    
-    x = np.array(x) # x position
-    y = np.array(y) # y position
-    values = np.array(values)
-    
-    # Normalize coordinates to [0,1] range
-    x = (x - x.min()) / (x.max() - x.min())
-    y = (y - y.min()) / (y.max() - y.min())
-    
-    # Create grid
-    xi = yi = np.linspace(0, 1, grid_resolution)
-    xi, yi = np.meshgrid(xi, yi)
-    
-    # Interpolate using cubic interpolation
-    zi = griddata((x, y), values, (xi, yi), method='cubic')
-    
-    # Fill NaN values with nearest neighbor
-    if np.isnan(zi).any():
-        zi_nearest = griddata((x, y), values, (xi, yi), method='nearest')
-        zi[np.isnan(zi)] = zi_nearest[np.isnan(zi)]
-    
-    return zi
-
-# Bandpass filter the data and segment the data into windows
-# extract the alpha power for each channel in each window and apply channel-wise normalization
-def preprocess(subjects_data, electrode_positions, channel_names):
-    print("preprocess begin")
+# Preprocess the data
+def preprocess(subjects_data):
     for subject_data in subjects_data:
         for trial in subject_data['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
             trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
             trial['eeg'] = segment_eeg_data(trial)
-            trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
             trial['eeg'] = normalize_data(trial['eeg'])
-            print("create topopmaps")
-            # create topo map for each window
-            topomaps = []
-            for window in trial['eeg']:
-                window = create_topo_map(window, electrode_positions, channel_names)
-                topomaps.append(window)
-            
-            trial['eeg'] = np.array(topomaps)
-            print("done with topopmaps")
-    print("preprocess complete")
-    # create 2d topo maps from electrode positions
+    
     return subjects_data
 
 # -----------------------------

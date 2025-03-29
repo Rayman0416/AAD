@@ -145,20 +145,20 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     
     return filtered_data
 
+# z-score channel-wise normalization
+def normalize_data(eeg_data):
+    mean = np.mean(eeg_data, axis=0)
+    std = np.std(eeg_data, axis=0)
+    return (eeg_data - mean) / std
+
 # Preprocess the data
 def preprocess(subjects_data):
     for subject_data in subjects_data:
-        # stack all trials of the subject and fit scaler to all trials per subject
-        all_trials = np.vstack([trial['eeg'] for trial in subject_data['trials']])
-        scaler = StandardScaler()
-        scaler.fit(all_trials)
-        
-        # Iterate over each trial in the subject and preprocess
         for trial in subject_data['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
             trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
-            trial['eeg'] = scaler.transform(trial['eeg'])
             trial['eeg'] = segment_eeg_data(trial)
+            trial['eeg'] = normalize_data(trial['eeg'])
     
     return subjects_data
     
