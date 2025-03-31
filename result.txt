@@ -1,4 +1,4 @@
-KUL Dataset EEGNet model 2 (3 convolutional layers)
+KUL Dataset model (3 convolutional layers)
 Leave one subject out cross validation
 
 Test subject(fold): {0}
@@ -200,7 +200,7 @@ Mean Test Accuracy: 0.6747 ± 0.1311
 
 
 
-KUL Dataset EEGNet 2 model (3 convolutional layers)
+KUL Dataset model (3 convolutional layers)
 Leave one trial out cross validation
 
 Test subject(fold): {0}
@@ -306,7 +306,7 @@ Mean Test Accuracy: 0.7488 ± 0.0653
 
 
 
-DTU Dataset EEGNet model 2
+DTU Dataset model (3 convolutional layers)
 
 Test subject(fold): {0}
 (49980, 128, 66) (2940, 128, 66)

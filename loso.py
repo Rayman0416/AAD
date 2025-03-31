@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import LeaveOneGroupOut
 from scipy.signal import butter, filtfilt
+from scipy.fft import fft, ifft, fftfreq
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -160,6 +161,7 @@ def preprocess(subjects_data):
             trial['eeg'] = segment_eeg_data(trial)
             trial['eeg'] = normalize_data(trial['eeg'])
     
+    print(subjects_data[0]['trials'][0]['eeg'][0])
     return subjects_data
     
 # -----------------------------
@@ -332,7 +334,7 @@ if __name__ == "__main__":
 
             # Reshape each window to (1, time_steps, channels) and add to X
             for window in eeg_windows:
-                X.append(window[:, :])  # Add a new axis for channel dim
+                X.append(window)  # Add a new axis for channel dim
 
             # Repeat the label for each window
             y.extend([trial['label']] * num_windows)

@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 from torch.nn.utils.parametrizations import weight_norm
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import LeaveOneGroupOut
@@ -177,7 +178,7 @@ def compute_alpha_power(eeg_data, sfreq=128):
     Returns:
         alpha_power: (n_samples, n_channels)
     """
-    n_samples, n_timesteps, n_channels = eeg_data.shape
+    n_timesteps = eeg_data.shape[1]
     
     # Compute FFT and power spectrum
     fft_vals = np.abs(fft(eeg_data, axis=1)) ** 2
@@ -290,64 +291,156 @@ def preprocess(subjects_data, electrode_positions, channel_names):
             trial['eeg'] = np.array(topomaps)
             print("done with topopmaps")
     print("preprocess complete")
+    
+    window = subjects_data[0]['trials'][0]['eeg'][0]
+    save_topo_map_image(window, "./topomap.png")
     # create 2d topo maps from electrode positions
     return subjects_data
+
+# save image of a topographical map of the alpha power range of signals
+def save_topo_map_image(topo_map: np.ndarray,
+                        output_filepath: str,
+                        title: str = None,
+                        cmap: str = 'viridis',
+                        show_axis: bool = False,
+                        colorbar: bool = True,
+                        dpi: int = 150):
+    """
+    Generates an image from a 2D topographic map array and saves it to a file.
+
+    Args:
+        topo_map (np.ndarray): The 2D NumPy array (grid_resolution, grid_resolution)
+                               representing the topographic map.
+        output_filepath (str): The full path and filename for the output image
+                               (e.g., 'plots/topo_map_01.png'). The file format
+                               is inferred from the extension (.png, .jpg, .pdf, etc.).
+        title (str, optional): A title to add to the plot. Defaults to None.
+        cmap (str, optional): The matplotlib colormap to use ('viridis', 'gray',
+                              'jet', 'coolwarm', etc.). Defaults to 'viridis'.
+        show_axis (bool, optional): Whether to display the coordinate axes and ticks.
+                                    Defaults to False (axes hidden).
+        colorbar (bool, optional): Whether to add a colorbar legend to the image.
+                                   Defaults to True.
+        dpi (int, optional): Dots Per Inch - the resolution of the saved image.
+                             Defaults to 150.
+    """
+    if not isinstance(topo_map, np.ndarray) or topo_map.ndim != 2:
+        raise ValueError("topo_map must be a 2D NumPy array.")
+
+    fig, ax = plt.subplots(figsize=(6, 6)) # Adjust figsize as needed
+
+    # Display the 2D map array as an image
+    # origin='upper' places the [0,0] index at the top-left corner
+    im = ax.imshow(topo_map, cmap=cmap, origin='upper', interpolation='hanning') # Use interpolation for smoother look
+
+    # Add a colorbar if requested
+    if colorbar:
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04) # Adjust fraction/pad as needed
+
+    # Set the title if provided
+    if title:
+        ax.set_title(title)
+
+    # Hide axes and ticks if requested
+    if not show_axis:
+        ax.axis('off')
+
+    # Ensure the output directory exists (optional, good practice)
+    output_dir = os.path.dirname(output_filepath)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created directory: {output_dir}")
+
+    # Save the figure
+    try:
+        # bbox_inches='tight' and pad_inches=0 help remove extra whitespace,
+        # especially when axes are off.
+        plt.savefig(output_filepath, dpi=dpi, bbox_inches='tight', pad_inches=0)
+        # print(f"Saved topographic map to: {output_filepath}") # Optional confirmation
+    except Exception as e:
+        print(f"Error saving file {output_filepath}: {e}")
+
+    # Close the plot figure to free up memory
+    plt.close(fig)
 
 # -----------------------------
 # Neural Network Models
 # -----------------------------
 # 2 convolutional layer
 class EEGNet(nn.Module):
-    def __init__(self, num_channels, num_timesteps, num_classes):
+    def __init__(self, grid_resolution=64): # Removed num_classes, output is 1
+        """
+        CNN for EEG Topographic Maps - Binary Classification (Attended Ear).
+
+        Args:
+            grid_resolution (int): The width and height of the input topomap image.
+        """
         super(EEGNet, self).__init__()
-        
-        # # Convolutional Layer to extract spatial and temporal features
-        # self.conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1)
-        # self.batchnorm1 = nn.BatchNorm2d(16)
+        self.grid_resolution = grid_resolution
 
-        # self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1)
-        # self.batchnorm2 = nn.BatchNorm2d(32)
-        
-        # Convolutional Layer with Weight Normalization
-        self.conv1 = weight_norm(nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1))
-        self.batchnorm1 = nn.BatchNorm2d(16)
+        # Convolutional Feature Extractor (Same as before)
+        self.conv_block1 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2) # Output: grid_res/2
+        )
+        self.conv_block2 = nn.Sequential(
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2) # Output: grid_res/4
+        )
+        self.conv_block3 = nn.Sequential(
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2) # Output: grid_res/8
+        )
+        self.conv_block4 = nn.Sequential(
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2) # Output: grid_res/16
+        )
 
-        self.conv2 = weight_norm(nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1))
-        self.batchnorm2 = nn.BatchNorm2d(32)
+        # Calculate the flattened size dynamically
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, 1, self.grid_resolution, self.grid_resolution)
+            dummy_output = self._forward_features(dummy_input)
+            self.flattened_size = dummy_output.view(1, -1).size(1)
 
-        # Activation
-        self.relu = nn.ReLU()
-        
-        # Pooling layer to reduce dimensions
-        self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-        
-        # # Fully connected layer for classification
-        # self.fc1 = nn.Linear(32 * (num_timesteps // 4) * (num_channels // 4), 64)  # Adjust dimensions after pooling
-        # self.fc2 = nn.Linear(64, num_classes)
-        
-        # Fully connected layer with Weight Normalization
-        self.fc1 = weight_norm(nn.Linear(32 * (num_timesteps // 4) * (num_channels // 4), 64))
-        self.fc2 = weight_norm(nn.Linear(64, num_classes))
+        # Classifier Head for Binary Classification
+        self.classifier = nn.Sequential(
+            nn.Linear(self.flattened_size, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(512, 2) # *** CHANGED: Output dimension is 1 for binary classification ***
+            # No final Sigmoid here, as nn.BCEWithLogitsLoss is preferred
+        )
 
-        # Dropout for regularization
-        self.dropout_conv1 = nn.Dropout(0.1)  # Dropout after first convolutional layers
-        self.dropout_conv2 = nn.Dropout(0.1) # Droptou after second convolutional layers
-        self.dropout_fc = nn.Dropout(0.1)    # Dropout after fully connected layers
+    def _forward_features(self, x):
+        """Helper function to pass input through conv blocks."""
+        x = self.conv_block1(x)
+        x = self.conv_block2(x)
+        x = self.conv_block3(x)
+        x = self.conv_block4(x)
+        return x
 
     def forward(self, x):
-        x = x.unsqueeze(1)  # Add a channel dimension (batch_size, 1, time_steps, channels)
+        """
+        Forward pass of the network.
 
-        # Convolutional layers
-        x = self.pool(self.relu(self.batchnorm1(self.conv1(x))))
-        # x = self.dropout_conv1(x)
-        x = self.pool(self.relu(self.batchnorm2(self.conv2(x))))
-        # x = self.dropout_conv2(x)
-        
-        # fully connected layers
-        x = x.view(x.size(0), -1)  # Flatten for FC layer
-        x = self.relu(self.fc1(x))
-        x = self.dropout_fc(x)
-        x = self.fc2(x)
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, 1, grid_resolution, grid_resolution).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, 1) containing raw logits.
+        """
+        x = x.unsqueeze(1)
+        x = self._forward_features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
         return x
 
 # 3 convolutional layer
@@ -492,12 +585,12 @@ if __name__ == "__main__":
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
-        train_loader = DataLoader(train_dataset, batch_size=30, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=30, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
-        model = EEGNet2(num_classes=2, num_channels=num_channels, input_size=num_timesteps).to(device)
+        model = EEGNet().to(device)
 
         # assign weights to classes to counter class imbalance
         class_counts = np.bincount(y_train)
