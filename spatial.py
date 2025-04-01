@@ -13,7 +13,7 @@ from sklearn.model_selection import LeaveOneGroupOut
 from scipy.signal import butter, filtfilt
 from scipy.fft import fft, fftfreq
 from scipy.spatial import distance
-from scipy.interpolate import griddata
+from scipy.interpolate import CloughTocher2DInterpolator
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -224,49 +224,49 @@ def azimuthal_equidistant_proj(electrode_positions, center="Cz"):
     
     return projected_2d
 
-# Create a 2D topological map (grid_resolution, grid_resolution) from channel values and positions
-def create_topo_map(channel_values, electrode_positions, channel_names, grid_resolution=64):
+def create_topo_map(channel_values, electrode_positions, channel_names, grid_resolution=32):
     """
-    Create 2D topological maps using azimuthal equidistant projection
+    Create 2D topological maps using Clough-Tocher interpolation.
     
     Args:
-        channel_values: 1D array of alpha power values (64,)
-        electrode_positions_3d: Dictionary of 3D electrode positions {name: [x,y,z]}
-        channel_names: List of channel names in order of channel_values
-        center_ch: Name of center channel for projection
-        grid_resolution: Size of output 2D map
+        channel_values: 1D array of alpha power values (n_channels,).
+        electrode_positions: Dictionary of electrode positions {name: [x, y]}.
+        channel_names: List of channel names matching channel_values.
+        grid_resolution: Size of output 2D map (grid_resolution x grid_resolution).
         
     Returns:
-        2D topological map (grid_resolution, grid_resolution)
+        2D topological map (grid_resolution, grid_resolution).
     """
-    
-    # Prepare coordinates and values for interpolation
+    # Prepare coordinates and values
     x, y, values = [], [], []
     for ch_name, val in zip(channel_names, channel_values):
         if ch_name in electrode_positions:
-            x.append(electrode_positions[ch_name][0])
-            y.append(electrode_positions[ch_name][1])
+            x.append(electrode_positions[ch_name][0])  # x-coordinate
+            y.append(electrode_positions[ch_name][1])  # y-coordinate
             values.append(val)
     
-    x = np.array(x) # x position
-    y = np.array(y) # y position
+    x = np.array(x)
+    y = np.array(y)
     values = np.array(values)
     
-    # Normalize coordinates to [0,1] range
+    # Normalize coordinates to [0, 1] range
     x = (x - x.min()) / (x.max() - x.min())
     y = (y - y.min()) / (y.max() - y.min())
     
-    # Create grid
+    # Create Clough-Tocher interpolator
+    points = np.column_stack((x, y))  # Shape: (n_points, 2)
+    interpolator = CloughTocher2DInterpolator(points, values, fill_value=np.nan)
+    
+    # Generate grid
     xi = yi = np.linspace(0, 1, grid_resolution)
     xi, yi = np.meshgrid(xi, yi)
+    zi = interpolator(xi, yi)
     
-    # Interpolate using cubic interpolation
-    zi = griddata((x, y), values, (xi, yi), method='cubic')
-    
-    # Fill NaN values with nearest neighbor
+    # Fill NaN values (if any) with nearest neighbor
     if np.isnan(zi).any():
-        zi_nearest = griddata((x, y), values, (xi, yi), method='nearest')
-        zi[np.isnan(zi)] = zi_nearest[np.isnan(zi)]
+        from scipy.interpolate import NearestNDInterpolator
+        nearest_interp = NearestNDInterpolator(points, values)
+        zi[np.isnan(zi)] = nearest_interp(np.column_stack([xi.ravel(), yi.ravel()]))[np.isnan(zi).ravel()]
     
     return zi
 
@@ -368,7 +368,7 @@ def save_topo_map_image(topo_map: np.ndarray,
 # -----------------------------
 # 2 convolutional layer
 class EEGNet(nn.Module):
-    def __init__(self, grid_resolution=64): # Removed num_classes, output is 1
+    def __init__(self, grid_resolution=32): # Removed num_classes, output is 1
         """
         CNN for EEG Topographic Maps - Binary Classification (Attended Ear).
 
@@ -442,7 +442,6 @@ class EEGNet(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
-
 # 3 convolutional layer
 class EEGNet2(nn.Module):
     def __init__(self, num_classes=2, num_channels=64, input_size=128):

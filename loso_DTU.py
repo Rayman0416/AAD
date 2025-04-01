@@ -39,7 +39,7 @@ def load_DTU(data_dir):
             trial_eeg = data.eeg
             
             for eeg, label in zip(trial_eeg, trial_labels):
-                
+                eeg = eeg[:, :-2] # drop the last 2 (mastoid) channels
                 subject_trials.append({
                     'eeg': eeg,
                     'label': 1 if label.value == 2 else 0
@@ -92,20 +92,23 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     
     return filtered_data
 
+# z-score channel-wise normalization
+def normalize_data(eeg_data):
+    mean = np.mean(eeg_data, axis=0)
+    std = np.std(eeg_data, axis=0)
+    return (eeg_data - mean) / std
+
 # Preprocess the data
 def preprocess(subjects):
     for subject in subjects:
-        all_trials = np.vstack([trial['eeg'] for trial in subject['trials']]) # stack all trials
-        scaler = StandardScaler()
-        scaler.fit(all_trials)
-
         # Iterate over each trial in the subject
         for trial in subject['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
-            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
-            trial['eeg'] = scaler.transform(trial['eeg'])
+            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=32.0, fs=128)
             trial['eeg'] = segment_eeg_data(trial)
+            trial['eeg'] = normalize_data(trial['eeg'])
 
+    print(subjects_data[0]['trials'][0]['eeg'][0])
     return subjects
             
 # -----------------------------
@@ -113,56 +116,41 @@ def preprocess(subjects):
 # -----------------------------
 # 2 convolutional layer
 class EEGNet(nn.Module):
-    def __init__(self, num_channels, num_timesteps, num_classes):
+    def __init__(self, num_classes=2):
         super(EEGNet, self).__init__()
-        
-        # # Convolutional Layer to extract spatial and temporal features
-        # self.conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1)
-        # self.batchnorm1 = nn.BatchNorm2d(16)
 
-        # self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1)
-        # self.batchnorm2 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(in_channels=1, out_channels=64, kernel_size=15, stride=2, padding=7),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2))
         
-        # Convolutional Layer with Weight Normalization
-        self.conv1 = weight_norm(nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1))
-        self.batchnorm1 = nn.BatchNorm2d(16)
-
-        self.conv2 = weight_norm(nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1))
-        self.batchnorm2 = nn.BatchNorm2d(32)
-
-        # Activation
-        self.relu = nn.ReLU()
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(64, 128, kernel_size=7, stride=1, padding=3),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2))
         
-        # Pooling layer to reduce dimensions
-        self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(128, 256, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2))
         
-        # # Fully connected layer for classification
-        # self.fc1 = nn.Linear(32 * (num_timesteps // 4) * (num_channels // 4), 64)  # Adjust dimensions after pooling
-        # self.fc2 = nn.Linear(64, num_classes)
-        
-        # Fully connected layer with Weight Normalization
-        self.fc1 = weight_norm(nn.Linear(32 * (num_timesteps // 4) * (num_channels // 4), 64))
-        self.fc2 = weight_norm(nn.Linear(64, num_classes))
-
-        # Dropout for regularization
-        self.dropout_conv1 = nn.Dropout(0.1)  # Dropout after first convolutional layers
-        self.dropout_conv2 = nn.Dropout(0.1) # Droptou after second convolutional layers
-        self.dropout_fc = nn.Dropout(0.1)    # Dropout after fully connected layers
-
+        self.fc = nn.Sequential(
+            nn.Linear(256 * 20, 128),  # Adjust input dim based on conv output
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(128, num_classes))
+    
     def forward(self, x):
-        x = x.unsqueeze(1)  # Add a channel dimension (batch_size, 1, time_steps, channels)
+        x = x.unsqueeze(1) # change shape -> (batch_size, 1, num_timesteps, num_channels)
 
-        # Convolutional layers
-        x = self.pool(self.relu(self.batchnorm1(self.conv1(x))))
-        # x = self.dropout_conv1(x)
-        x = self.pool(self.relu(self.batchnorm2(self.conv2(x))))
-        # x = self.dropout_conv2(x)
-        
-        # fully connected layers
-        x = x.view(x.size(0), -1)  # Flatten for FC layer
-        x = self.relu(self.fc1(x))
-        x = self.dropout_fc(x)
-        x = self.fc2(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = x.view(x.size(0), -1)  # Flatten
+        x = self.fc(x)
         return x
 
 # 3 convolutional layer
@@ -279,7 +267,7 @@ if __name__ == "__main__":
 
             # Reshape each window to (1, time_steps, channels) and add to X
             for window in eeg_windows:
-                X.append(window[:, :])  # Add a new axis for channel dim
+                X.append(window)  # Add a new axis for channel dim
 
             # Repeat the label for each window
             y.extend([trial['label']] * num_windows)
@@ -295,6 +283,7 @@ if __name__ == "__main__":
 
     logo = LeaveOneGroupOut()
     epochs = 10
+    results = []
 
     for train_idx, test_idx in logo.split(X, y, groups):
         X_train, X_test = X[train_idx], X[test_idx]
@@ -308,12 +297,12 @@ if __name__ == "__main__":
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
-        train_loader = DataLoader(train_dataset, batch_size=30, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=30, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # model = EEGNet(num_channels=num_channels, num_timesteps=num_timesteps, num_classes=2).to(device)
-        model = EEGNet2(num_classes=2, num_channels=64, input_size=128).to(device)
+        model = EEGNet(num_classes=2).to(device)
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003)
@@ -325,7 +314,10 @@ if __name__ == "__main__":
 
         # Evaluation
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+        results.append(test_acc)
         print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+    
+    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
 
     
     

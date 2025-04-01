@@ -334,8 +334,8 @@ if __name__ == "__main__":
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
-        train_loader = DataLoader(train_dataset, batch_size=30, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=30, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
