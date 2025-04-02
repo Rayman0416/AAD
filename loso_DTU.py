@@ -104,7 +104,7 @@ def preprocess(subjects):
         # Iterate over each trial in the subject
         for trial in subject['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
-            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=32.0, fs=128)
+            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
             trial['eeg'] = segment_eeg_data(trial)
             trial['eeg'] = normalize_data(trial['eeg'])
 
