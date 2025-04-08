@@ -588,7 +588,7 @@ if __name__ == "__main__":
     
     print("Loading AAD data...")
     try:
-        subjects_data, electrode_positions, channel_names = load_kul(data_KUL) 
+        subjects_data, electrode_positions, channel_names = load_DTU(data_DTU) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
