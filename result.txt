@@ -686,4 +686,135 @@ Val Loss: 0.6634, Val Acc: 0.5947
 Epoch 50/50 | Train Loss: 0.6672, Train Acc: 0.5901
 Val Loss: 0.6649, Val Acc: 0.5931
 
-Final Mean Test Accuracy: 0.5669
+final Test Loss: 0.6650, Test Acc: 0.5979
+
+KUL Dataset model (3 convolutional layers)
+
+Train: 73625 samples
+Validation: 9203 samples
+Test: 9204 samples
+Epoch 1/50 | Train Loss: 0.6983, Train Acc: 0.5015
+Val Loss: 0.6942, Val Acc: 0.4968
+Test Loss: 0.6940, Test Acc: 0.5002
+Epoch 2/50 | Train Loss: 0.6945, Train Acc: 0.5033
+Val Loss: 0.6936, Val Acc: 0.4921
+Epoch 3/50 | Train Loss: 0.6935, Train Acc: 0.5042
+Val Loss: 0.6932, Val Acc: 0.4997
+Test Loss: 0.6934, Test Acc: 0.4959
+Epoch 4/50 | Train Loss: 0.6934, Train Acc: 0.5025
+Val Loss: 0.6935, Val Acc: 0.4971
+Epoch 5/50 | Train Loss: 0.6932, Train Acc: 0.5061
+Val Loss: 0.6931, Val Acc: 0.5040
+Test Loss: 0.6931, Test Acc: 0.5047
+Epoch 6/50 | Train Loss: 0.6932, Train Acc: 0.5021
+Val Loss: 0.6932, Val Acc: 0.5006
+Epoch 7/50 | Train Loss: 0.6930, Train Acc: 0.5058
+Val Loss: 0.6931, Val Acc: 0.5065
+Test Loss: 0.6930, Test Acc: 0.5086
+Epoch 8/50 | Train Loss: 0.6932, Train Acc: 0.5009
+Val Loss: 0.6931, Val Acc: 0.4995
+Epoch 9/50 | Train Loss: 0.6932, Train Acc: 0.5007
+Val Loss: 0.6931, Val Acc: 0.5007
+Epoch 10/50 | Train Loss: 0.6931, Train Acc: 0.5026
+Val Loss: 0.6932, Val Acc: 0.4951
+Epoch 11/50 | Train Loss: 0.6931, Train Acc: 0.5066
+Val Loss: 0.6931, Val Acc: 0.5012
+Epoch 12/50 | Train Loss: 0.6929, Train Acc: 0.5100
+Val Loss: 0.6932, Val Acc: 0.5014
+Epoch 13/50 | Train Loss: 0.6930, Train Acc: 0.5073
+Val Loss: 0.6929, Val Acc: 0.5092
+Test Loss: 0.6929, Test Acc: 0.5158
+Epoch 14/50 | Train Loss: 0.6928, Train Acc: 0.5134
+Val Loss: 0.6925, Val Acc: 0.5104
+Test Loss: 0.6921, Test Acc: 0.5214
+Epoch 15/50 | Train Loss: 0.6927, Train Acc: 0.5137
+Val Loss: 0.6924, Val Acc: 0.5162
+Test Loss: 0.6924, Test Acc: 0.5184
+Epoch 16/50 | Train Loss: 0.6920, Train Acc: 0.5216
+Val Loss: 0.6917, Val Acc: 0.5187
+Test Loss: 0.6916, Test Acc: 0.5218
+Epoch 17/50 | Train Loss: 0.6910, Train Acc: 0.5284
+Val Loss: 0.6901, Val Acc: 0.5300
+Test Loss: 0.6888, Test Acc: 0.5436
+Epoch 18/50 | Train Loss: 0.6895, Train Acc: 0.5356
+Val Loss: 0.6879, Val Acc: 0.5423
+Test Loss: 0.6857, Test Acc: 0.5561
+Epoch 19/50 | Train Loss: 0.6879, Train Acc: 0.5444
+Val Loss: 0.6856, Val Acc: 0.5531
+Test Loss: 0.6845, Test Acc: 0.5576
+Epoch 20/50 | Train Loss: 0.6872, Train Acc: 0.5453
+Val Loss: 0.6877, Val Acc: 0.5469
+Epoch 21/50 | Train Loss: 0.6863, Train Acc: 0.5485
+Val Loss: 0.6820, Val Acc: 0.5588
+Test Loss: 0.6800, Test Acc: 0.5711
+Epoch 22/50 | Train Loss: 0.6854, Train Acc: 0.5517
+Val Loss: 0.6800, Val Acc: 0.5660
+Test Loss: 0.6786, Test Acc: 0.5741
+Epoch 23/50 | Train Loss: 0.6842, Train Acc: 0.5549
+Val Loss: 0.6811, Val Acc: 0.5589
+Epoch 24/50 | Train Loss: 0.6832, Train Acc: 0.5564
+Val Loss: 0.6813, Val Acc: 0.5524
+Epoch 25/50 | Train Loss: 0.6822, Train Acc: 0.5585
+Val Loss: 0.6750, Val Acc: 0.5648
+Epoch 26/50 | Train Loss: 0.6806, Train Acc: 0.5625
+Val Loss: 0.6717, Val Acc: 0.5811
+Test Loss: 0.6698, Test Acc: 0.5893
+Epoch 27/50 | Train Loss: 0.6797, Train Acc: 0.5664
+Val Loss: 0.6733, Val Acc: 0.5823
+Test Loss: 0.6698, Test Acc: 0.5868
+Epoch 28/50 | Train Loss: 0.6793, Train Acc: 0.5653
+Val Loss: 0.6708, Val Acc: 0.5768
+Epoch 29/50 | Train Loss: 0.6771, Train Acc: 0.5720
+Val Loss: 0.6691, Val Acc: 0.5851
+Test Loss: 0.6661, Test Acc: 0.5920
+Epoch 30/50 | Train Loss: 0.6769, Train Acc: 0.5732
+Val Loss: 0.6704, Val Acc: 0.5864
+Test Loss: 0.6671, Test Acc: 0.5910
+Epoch 31/50 | Train Loss: 0.6760, Train Acc: 0.5733
+Val Loss: 0.6743, Val Acc: 0.5696
+Epoch 32/50 | Train Loss: 0.6759, Train Acc: 0.5732
+Val Loss: 0.6693, Val Acc: 0.5865
+Test Loss: 0.6644, Test Acc: 0.5966
+Epoch 33/50 | Train Loss: 0.6745, Train Acc: 0.5770
+Val Loss: 0.6676, Val Acc: 0.5869
+Test Loss: 0.6663, Test Acc: 0.5985
+Epoch 34/50 | Train Loss: 0.6757, Train Acc: 0.5741
+Val Loss: 0.6709, Val Acc: 0.5826
+Epoch 35/50 | Train Loss: 0.6745, Train Acc: 0.5729
+Val Loss: 0.6637, Val Acc: 0.5969
+Test Loss: 0.6597, Test Acc: 0.6041
+Epoch 36/50 | Train Loss: 0.6723, Train Acc: 0.5808
+Val Loss: 0.6607, Val Acc: 0.6006
+Test Loss: 0.6574, Test Acc: 0.6073
+Epoch 37/50 | Train Loss: 0.6725, Train Acc: 0.5765
+Val Loss: 0.6630, Val Acc: 0.5909
+Epoch 38/50 | Train Loss: 0.6728, Train Acc: 0.5790
+Val Loss: 0.6608, Val Acc: 0.5977
+Epoch 39/50 | Train Loss: 0.6712, Train Acc: 0.5837
+Val Loss: 0.6589, Val Acc: 0.6069
+Test Loss: 0.6561, Test Acc: 0.6134
+Epoch 40/50 | Train Loss: 0.6722, Train Acc: 0.5807
+Val Loss: 0.6676, Val Acc: 0.5826
+Epoch 41/50 | Train Loss: 0.6693, Train Acc: 0.5843
+Val Loss: 0.6574, Val Acc: 0.6111
+Test Loss: 0.6545, Test Acc: 0.6167
+Epoch 42/50 | Train Loss: 0.6703, Train Acc: 0.5842
+Val Loss: 0.6590, Val Acc: 0.6036
+Epoch 43/50 | Train Loss: 0.6704, Train Acc: 0.5828
+Val Loss: 0.6569, Val Acc: 0.6078
+Epoch 44/50 | Train Loss: 0.6695, Train Acc: 0.5854
+Val Loss: 0.6582, Val Acc: 0.6000
+Epoch 45/50 | Train Loss: 0.6686, Train Acc: 0.5828
+Val Loss: 0.6578, Val Acc: 0.6055
+Epoch 46/50 | Train Loss: 0.6690, Train Acc: 0.5856
+Val Loss: 0.6548, Val Acc: 0.6100
+Epoch 47/50 | Train Loss: 0.6696, Train Acc: 0.5833
+Val Loss: 0.6638, Val Acc: 0.5933
+Epoch 48/50 | Train Loss: 0.6697, Train Acc: 0.5871
+Val Loss: 0.6547, Val Acc: 0.6059
+Epoch 49/50 | Train Loss: 0.6686, Train Acc: 0.5866
+Val Loss: 0.6574, Val Acc: 0.6048
+Epoch 50/50 | Train Loss: 0.6673, Train Acc: 0.5877
+Val Loss: 0.6592, Val Acc: 0.6038
+
+Final Test Loss: 0.6545, Test Acc: 0.6167

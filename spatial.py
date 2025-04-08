@@ -586,9 +586,9 @@ if __name__ == "__main__":
     data_KUL = "./KUL"  # KUL data dir
     data_DTU = "./DTU"  # DTU data dir
     
-    print("Loading KULeuven AAD data...")
+    print("Loading AAD data...")
     try:
-        subjects_data, electrode_positions, channel_names = load_DTU(data_DTU) 
+        subjects_data, electrode_positions, channel_names = load_kul(data_KUL) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
@@ -646,7 +646,7 @@ if __name__ == "__main__":
     
     # Initialize model, loss, optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = EEGNet2().to(device)
+    model = Rayanet().to(device)
     criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
     
     optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
