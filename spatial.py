@@ -3,6 +3,7 @@ import mne
 import math
 import scipy.io as sio
 import numpy as np
+import shap
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -456,7 +457,7 @@ class Rayanet(nn.Module):
             # Input: (in_channels) x 32 x 32
             nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.AvgPool2d(kernel_size=2, stride=2),  
             nn.Dropout(0.1)
         )
@@ -465,11 +466,11 @@ class Rayanet(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(16*16*32, 512),
             nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(512, 32),
             nn.BatchNorm1d(32),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Linear(32, 1)
         )
     
@@ -490,11 +491,11 @@ class EEGNet2(nn.Module):
             # Block 1: Output size = 32 x 32
             nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 16 x 16
             nn.Dropout(0.2),
@@ -502,11 +503,11 @@ class EEGNet2(nn.Module):
             # Block 2: Output size = 16 x 16
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.Conv2d(128, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 8 x 8
             nn.Dropout(0.3),
@@ -514,11 +515,11 @@ class EEGNet2(nn.Module):
             # Block 3: Output size = 8 x 8
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
             nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.AvgPool2d(kernel_size=2, stride=2),  # Output: 4 x 4
             nn.Dropout(0.4)
@@ -527,12 +528,12 @@ class EEGNet2(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(4 * 4 * 256, 512),
             nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Dropout(0.4),
 
             nn.Linear(512, 64),
             nn.BatchNorm1d(64),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Dropout(0.3),
 
             nn.Linear(64, 1)
@@ -621,12 +622,12 @@ if __name__ == "__main__":
     print(X.shape, y.shape, len(groups))
 
     X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y, test_size=0.2, stratify=y
     )
     
     # Second split: 10% validation, 10% test (from the 20% temp)
     X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp
+        X_temp, y_temp, test_size=0.5, stratify=y_temp
     )
     
     print(f"Train: {X_train.shape[0]} samples")
@@ -654,7 +655,7 @@ if __name__ == "__main__":
     # Training loop for 10 epochs
     num_epochs = 50
     best_val_acc = 0
-    test_accuracies = []
+    bet_model = None
     
     for epoch in range(num_epochs):
         # Training
@@ -668,17 +669,22 @@ if __name__ == "__main__":
         # Test (only for best model)
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-            test_accuracies.append(test_acc)
-            print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
-    
-    # Calculate mean test accuracy
-    mean_test_acc = np.mean(test_accuracies)
-    print(f"\nFinal Mean Test Accuracy: {mean_test_acc:.4f}")
+            best_model = model.state_dict()
 
+    # Calculate test accuracy
+    model.load_state_dict(best_model)
+    test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+    print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
+    background, _ = next(iter(train_loader))
+    background = background[:50].to(device)
 
+    test_samples, _ = next(iter(test_loader))
+    test_samples = test_samples[:10].to(device)  # Use a small batch for explanation
 
+    explainer = shap.DeepExplainer(model, background)
+    shap_values = explainer.shap_values(test_samples)
+    shap.image_plot(shap_values, test_samples.cpu().numpy())
 
 
     # # leave one subject out cross-validation
