@@ -34,7 +34,7 @@ class EEGDataset(Dataset):
         )
     
 # Load in first 8 trials of eeg data for each subject and extract 2D electrode coordinates
-def load_kuleuven_aad_data(data_dir):
+def load_kul(data_dir):
     """
     Load EEG data and labels from the KULeuven AAD dataset.
 
@@ -114,6 +114,51 @@ def load_kuleuven_aad_data(data_dir):
     if not subjects_data:
         raise ValueError("No valid EEG data found.")
 
+    return subjects_data, electrode_positions, channel_names
+
+def load_DTU(data_dir):
+    subjects_data = []
+    channel_names = []
+    
+    for file_name in os.listdir(data_dir):
+        if file_name.endswith("preproc128.mat"):
+            subject_trials = []
+            file_path = os.path.join(data_dir, file_name)
+            mat_data = sio.loadmat(file_path, struct_as_record=False, squeeze_me=True)
+            data = mat_data['data']
+
+            if len(channel_names) == 0:
+                channels = data.dim.chan.eeg[0]
+                for channel in channels:
+                    channel_names.append(channel)
+            
+            trial_labels = data.event.eeg
+            trial_eeg = data.eeg
+            
+            for eeg, label in zip(trial_eeg, trial_labels):
+                # re-reference eeg channels to the average of the mastoid channels
+                mastoid = eeg[:, -2:]
+                mastoid_avg = np.mean(mastoid, axis=1, keepdims=True)
+                eeg = eeg[:, :-2] # drop the last 2 (mastoid) channels
+                eeg = eeg - mastoid_avg
+
+                subject_trials.append({
+                    'eeg': eeg,
+                    'label': 1 if label.value == 2 else 0
+                })
+        
+            if subject_trials:
+                subjects_data.append({'name': file_name, 'trials': subject_trials})
+    
+    montage = mne.channels.make_standard_montage("standard_1020")
+    electrode_positions = {}
+    for ch in channel_names:
+        if ch in montage.ch_names:
+            electrode_positions[ch] = montage.get_positions()["ch_pos"][ch]
+
+    # Transform the 3D coordinates to the 2D plane
+    electrode_positions = azimuthal_equidistant_proj(electrode_positions)
+                
     return subjects_data, electrode_positions, channel_names
 
 def segment_eeg_data(trial, window_size=128, overlap=0.5):
@@ -214,9 +259,9 @@ def cart2sph(x, y, z):
     :return: radius, elevation, azimuth
     """
     x2_y2 = x**2 + y**2
-    r = math.sqrt(x2_y2 + z**2)                    # r
-    elev = math.atan2(z, math.sqrt(x2_y2))            # Elevation
-    az = math.atan2(y, x)                          # Azimuth
+    r = math.sqrt(x2_y2 + z**2)
+    elev = math.atan2(z, math.sqrt(x2_y2))
+    az = math.atan2(y, x)
     return r, elev, az
 
 def pol2cart(theta, rho):
@@ -438,58 +483,67 @@ class Rayanet(nn.Module):
 
 # 3 convolutional layer
 class EEGNet2(nn.Module):
-    def __init__(self, num_classes=2, num_channels=64, input_size=128):
-        """
-        EEGNet-inspired CNN for EEG classification.
-
-        Args:
-        - num_classes (int): Number of output classes.
-        - num_channels (int): Number of EEG channels (default: 64).
-        - input_size (int): Number of time steps per segment.
-        """
+    def __init__(self, in_channels=1):  
         super(EEGNet2, self).__init__()
 
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(
-            in_channels=1, out_channels=32, kernel_size=(3, 3), stride=1, padding=1
+        self.features = nn.Sequential(
+            # Block 1: Output size = 32 x 32
+            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+
+            nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 16 x 16
+            nn.Dropout(0.2),
+
+            # Block 2: Output size = 16 x 16
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+
+            nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 8 x 8
+            nn.Dropout(0.3),
+
+            # Block 3: Output size = 8 x 8
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+
+            nn.AvgPool2d(kernel_size=2, stride=2),  # Output: 4 x 4
+            nn.Dropout(0.4)
         )
-        self.batch_norm1 = nn.BatchNorm2d(32)
 
-        self.conv2 = nn.Conv2d(
-            in_channels=32, out_channels=64, kernel_size=(3, 3), padding=1
+        self.classifier = nn.Sequential(
+            nn.Linear(4 * 4 * 256, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.4),
+
+            nn.Linear(512, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+
+            nn.Linear(64, 1)
         )
-        self.batch_norm2 = nn.BatchNorm2d(64)
-        
-
-        self.conv3 = nn.Conv2d(
-            in_channels=64, out_channels=128, kernel_size=(3, 3), padding=1
-        )
-        self.batch_norm3 = nn.BatchNorm2d(128)
-
-        self.pool = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
-
-        # Flatten and Fully Connected Layer
-        # after 3 pooling layers: 128 feature maps with size  128/8 x 64/8
-        self.fc = nn.Linear(128 * (input_size // 8) * (num_channels // 8), 256)
-        self.fc2 = nn.Linear(256, num_classes)
-
-        self.dropout = nn.Dropout(0.3)  # Dropout after first convolutional layers
 
     def forward(self, x):
-        x = x.unsqueeze(1) # change shape -> (batch_size, 1, num_timesteps, num_channels)
-
-        # convolutional layers
-        x = self.pool(F.relu(self.batch_norm1(self.conv1(x))))
-        x = self.pool(F.relu(self.batch_norm2(self.conv2(x))))
-        x = self.pool(F.relu(self.batch_norm3(self.conv3(x))))
-        x = self.dropout(x)
-        
-        # fully connected layers
-        x = x.view(x.size(0), -1) # flatten
-        x = F.relu(self.fc(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return x
+        x = x.unsqueeze(1)  # Add channel dimension if needed (for grayscale input)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # Flatten
+        x = self.classifier(x)
+        return x  # Raw logits
 
 # -----------------------------
 # Training and Evaluation
@@ -529,11 +583,12 @@ def evaluate(model, dataloader, criterion, device):
     return total_loss / len(dataloader.dataset), correct / len(dataloader.dataset)
 
 if __name__ == "__main__":
-    data_dir = "./KUL"  # Update with actual dataset path
+    data_KUL = "./KUL"  # KUL data dir
+    data_DTU = "./DTU"  # DTU data dir
     
     print("Loading KULeuven AAD data...")
     try:
-        subjects_data, electrode_positions, channel_names = load_kuleuven_aad_data(data_dir) 
+        subjects_data, electrode_positions, channel_names = load_DTU(data_DTU) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
@@ -591,7 +646,7 @@ if __name__ == "__main__":
     
     # Initialize model, loss, optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Rayanet().to(device)
+    model = EEGNet2().to(device)
     criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
     
     optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
