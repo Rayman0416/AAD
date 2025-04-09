@@ -4,7 +4,7 @@ import numpy as np
 import scipy.io as sio
 from scipy.signal import butter, filtfilt
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.model_selection import LeaveOneGroupOut
 import torch.nn as nn
 import torch.optim as optim
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     print(X.shape, y.shape, len(groups))
 
     logo = LeaveOneGroupOut()
-    epochs = 10
+    epochs = 20
     results = []
 
     for train_idx, test_idx in logo.split(X, y, groups):
@@ -292,12 +292,18 @@ if __name__ == "__main__":
         print(X_train.shape, X_test.shape)
         print(np.bincount(y_train))
 
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.1, stratify=y_train, random_state=42
+        )
+
         train_dataset = EEGDataset(X_train, y_train)
+        val_dataset = EEGDataset(X_val, y_val)
         test_dataset = EEGDataset(X_test, y_test)
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -310,7 +316,8 @@ if __name__ == "__main__":
         # Training loop
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
         # Evaluation
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)

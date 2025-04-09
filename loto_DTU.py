@@ -4,7 +4,7 @@ import numpy as np
 import scipy.io as sio
 from scipy.signal import butter, filtfilt
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.model_selection import LeaveOneGroupOut
 import torch.nn as nn
 import torch.optim as optim
@@ -98,21 +98,21 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     
     return filtered_data
 
+# z-score channel-wise normalization
+def normalize_data(eeg_data):
+    mean = np.mean(eeg_data, axis=0)
+    std = np.std(eeg_data, axis=0)
+    return (eeg_data - mean) / std
+
 # Preprocess the data
 def preprocess(subjects_data):
     for subject_data in subjects_data:
-        # stack all trials of the subject and fit scaler to all trials per subject
-        all_trials = np.vstack([trial['eeg'] for trial in subject_data['trials']])
-        scaler = StandardScaler()
-        scaler.fit(all_trials)
-        
-        # Iterate over each trial in the subject and preprocess
         for trial in subject_data['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
             trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
-            trial['eeg'] = scaler.transform(trial['eeg'])
             trial['eeg'] = segment_eeg_data(trial)
-            
+            trial['eeg'] = normalize_data(trial['eeg'])
+    
     return subjects_data
             
 # -----------------------------
@@ -187,7 +187,7 @@ class EEGNet2(nn.Module):
 
         # Convolutional layers
         self.conv1 = nn.Conv2d(
-            in_channels=1, out_channels=32, kernel_size=(3, 3), stride=1, padding=1
+            in_channels=1, out_channels=32, kernel_size=(3, 3), padding=1
         )
         self.batch_norm1 = nn.BatchNorm2d(32)
 
@@ -322,22 +322,29 @@ if __name__ == "__main__":
 
     # leave one trial out cross validation
     logo = LeaveOneGroupOut()
-    epochs = 10
+    epochs = 20
 
     for train_idx, test_idx in logo.split(X, y, groups):
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
         print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
 
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.1, stratify=y_train, random_state=42
+        )
+
         train_dataset = EEGDataset(X_train, y_train)
+        val_dataset = EEGDataset(X_val, y_val)
         test_dataset = EEGDataset(X_test, y_test)
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch.cuda.empty_cache()  # Add before model instantiation if using GPU
         num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
         model = EEGNet2(num_classes=2, num_channels=num_channels, input_size=num_timesteps).to(device)
 
@@ -347,7 +354,8 @@ if __name__ == "__main__":
         # Training loop
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
         # Evaluation
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)

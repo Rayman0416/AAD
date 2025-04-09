@@ -9,10 +9,8 @@ import torch.nn.functional as F
 from torch.nn.utils.parametrizations import weight_norm
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import LeaveOneGroupOut
+from sklearn.model_selection import train_test_split
 from scipy.signal import butter, filtfilt
-from scipy.fft import fft, fftfreq
-from scipy.spatial import distance
-from scipy.interpolate import griddata
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -317,13 +315,13 @@ if __name__ == "__main__":
     
     print("Loading KULeuven AAD data...")
     try:
-        subjects_data, electrode_positions, channel_names = load_kuleuven_aad_data(data_dir) 
+        subjects_data = load_kuleuven_aad_data(data_dir) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
     print(f"Loaded {len(subjects_data)} subjects.")
 
-    subjects_data = preprocess(subjects_data, electrode_positions, channel_names)
+    subjects_data = preprocess(subjects_data)
 
     # Prepare data for cross-validation
     X, y, groups = [], [], []
@@ -336,7 +334,6 @@ if __name__ == "__main__":
 
             # Reshape each window to (1, resolution, resolution) and add to X
             for window in eeg_windows:
-                print("window shapa: ", window.shape)
                 X.append(window)  # Add a new axis for channel dim
                 y.append(trial['label'])
                 groups.append(trial_counter)
@@ -353,7 +350,7 @@ if __name__ == "__main__":
 
     # leave one subject out cross-validation
     logo = LeaveOneGroupOut()
-    epochs = 10
+    epochs = 20
     results = []
 
     for train_idx, test_idx in logo.split(X, y, groups):
@@ -363,12 +360,19 @@ if __name__ == "__main__":
         # print(X_train.shape, X_test.shape)
         # print(np.bincount(y_train))
 
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.1, stratify=y_train, random_state=42
+        )
+
+
         train_dataset = EEGDataset(X_train, y_train)
+        val_dataset = EEGDataset(X_val, y_val)
         test_dataset = EEGDataset(X_test, y_test)
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -381,7 +385,8 @@ if __name__ == "__main__":
         # Training loop
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
         # Evaluation
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
