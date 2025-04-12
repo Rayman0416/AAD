@@ -5,11 +5,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.nn.utils.parametrizations import weight_norm
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.model_selection import train_test_split
 from scipy.signal import butter, filtfilt
+import shap
+import matplotlib.pyplot as plt
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -365,17 +366,37 @@ if __name__ == "__main__":
         optimizer = optim.Adam(model.parameters(), lr=0.0003)
 
         # Training loop
+        best_val_acc = 0.0
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
             print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_model = model.state_dict()
+
         # Evaluation
+        model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
         results.append(test_acc)
         print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+
+        background, _ = next(iter(train_loader))
+        background = background[:50].to(device)
+
+        test_samples, _ = next(iter(test_loader))
+        test_samples = test_samples[:10].to(device)  # Use a small batch for explanation
+
+        explainer = shap.DeepExplainer(model, background)
+        shap_values = explainer.shap_values(test_samples)
+        shap.image_plot(shap_values, test_samples.cpu().numpy(), show=False)
+
+        plt.savefig("shap_plot.png")
+        plt.close()
     
     print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    
 
 
 

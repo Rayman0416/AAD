@@ -7,16 +7,12 @@ import shap
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
-from torch.nn.utils.parametrizations import weight_norm
 from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 from scipy.signal import butter, filtfilt
-from scipy.interpolate import CloughTocher2DInterpolator
-import torch.nn.utils as utils
+from scipy.interpolate import griddata
+from sklearn.preprocessing import scale
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -102,20 +98,10 @@ def load_kul(data_dir):
             if subject_trials:
                 subjects_data.append({'name': file_name, 'trials': subject_trials})
 
-    # get electrode positions from the channel names
-    montage = mne.channels.make_standard_montage("standard_1020")
-    electrode_positions = {}
-    for ch in channel_names:
-        if ch in montage.ch_names:
-            electrode_positions[ch] = montage.get_positions()["ch_pos"][ch]
-
-    # Transform the 3D coordinates to the 2D plane
-    electrode_positions = azimuthal_equidistant_proj(electrode_positions)
-
     if not subjects_data:
         raise ValueError("No valid EEG data found.")
 
-    return subjects_data, electrode_positions, channel_names
+    return subjects_data, channel_names
 
 def load_DTU(data_dir):
     subjects_data = []
@@ -150,17 +136,8 @@ def load_DTU(data_dir):
         
             if subject_trials:
                 subjects_data.append({'name': file_name, 'trials': subject_trials})
-    
-    montage = mne.channels.make_standard_montage("standard_1020")
-    electrode_positions = {}
-    for ch in channel_names:
-        if ch in montage.ch_names:
-            electrode_positions[ch] = montage.get_positions()["ch_pos"][ch]
-
-    # Transform the 3D coordinates to the 2D plane
-    electrode_positions = azimuthal_equidistant_proj(electrode_positions)
                 
-    return subjects_data, electrode_positions, channel_names
+    return subjects_data, channel_names
 
 def segment_eeg_data(trial, window_size=128, overlap=0.5):
     """
@@ -186,7 +163,7 @@ def segment_eeg_data(trial, window_size=128, overlap=0.5):
         end = start + window_size
         segment = trial_data[start:end, :]
         segmented_data.append(segment)
-
+    
     return np.array(segmented_data)
 
 def bandpass_filter(data, lowcut, highcut, fs, order=4):
@@ -228,22 +205,40 @@ def compute_alpha_power(eeg_data, sfreq=128):
     Returns:
         alpha_power: (n_samples, n_channels)
     """
+    print("eeg shape: ", eeg_data.shape)
     n_samples, window_length, n_channels = eeg_data.shape
     
-    # Compute FFT and get magnitude spectrum
-    fft_vals = np.fft.fft(eeg_data, n=window_length, axis=1)
-    fft_vals = np.abs(fft_vals) / window_length
-    
-    freqs = np.fft.fftfreq(window_length, d=1/sfreq)  # Get frequency bins
-    positive_freqs = freqs[:window_length//2]  # Keep only positive frequencies
+    alpha_low = 8
+    alpha_high = 13
+    frequency_resolution = sfreq / window_length
+    point_low = math.ceil(alpha_low / frequency_resolution)
+    point_high = math.ceil(alpha_high / frequency_resolution) + 1
 
-    point_low = np.argmax(positive_freqs >= 8)   # First index where freq ≥ 8 Hz
-    point_high = np.argmax(positive_freqs > 13)  # First index where freq > 13 Hz
+    alpha_data = []
+    for window in eeg_data:
+        window_data = np.fft.fft(window, n=window_length, axis=0)
+        window_data = np.abs(window_data) / window_length
+        window_data = np.sum(np.power(window_data[point_low:point_high, :], 2), axis=0)
+        alpha_data.append(window_data)
+    alpha_data = np.stack(alpha_data, axis=0)
+    return alpha_data
 
-    # Compute power in alpha band
-    alpha_power = np.sum(np.power(fft_vals[:, point_low:point_high, :], 2), axis=1)
+    # # Compute FFT and get magnitude spectrum
+    # fft_vals = np.fft.fft(eeg_data, n=window_length, axis=1)
+    # fft_vals = np.abs(fft_vals) / window_length
     
-    return alpha_power
+    # freqs = np.fft.fftfreq(window_length, d=1/sfreq)  # Get frequency bins
+    # positive_freqs = freqs[:window_length//2]  # Keep only positive frequencies
+
+    # point_low = np.argmax(positive_freqs >= 8)   # First index where freq ≥ 8 Hz
+    # point_high = np.argmax(positive_freqs > 13)  # First index where freq > 13 Hz
+
+    # # Compute power in alpha band
+    # alpha_power = np.sum(np.power(fft_vals[:, point_low:point_high, :], 2), axis=1)
+    
+    # print("alpha power shape: ", alpha_power.shape)
+    # print(alpha_power)
+    # return alpha_power
 
 # z-score channel-wise normalization
 def normalize_data(eeg_data):
@@ -275,36 +270,21 @@ def pol2cart(theta, rho):
     return rho * math.cos(theta), rho * math.sin(theta)
 
 # Maps 3D EEG electrode positions to a 2D plane using Azimuthal Equidistant Projection.
-def azimuthal_equidistant_proj(electrode_positions, center="Cz"):
+def azim_proj(pos):
     """
-    Maps 3D EEG electrode positions to a 2D plane using Azimuthal Equidistant Projection with spherical coordinates.
-    :param electrode_positions: Dictionary of electrode names and their 3D Cartesian positions
-    :param center: Reference electrode (default is "Cz")
-    :return: Dictionary of projected 2D positions
-    """
-    # Get center electrode position (e.g., Cz as reference)
-    center_pos = np.array(electrode_positions[center])
-    
-    # Convert center position to spherical coordinates
-    _, center_elev, center_az = cart2sph(*center_pos)
-    
-    projected_2d = {}
-    
-    for elec, pos in electrode_positions.items():
-        pos = np.array(pos)
-        
-        # Convert electrode position to spherical coordinates
-        r, elev, az = cart2sph(*pos)
-        
-        # Compute azimuthal equidistant projection
-        rho = math.pi / 2 - elev  # Projection distance from center
-        X, Y = pol2cart(az, rho)
-        
-        projected_2d[elec] = (X, Y)
-    
-    return projected_2d
+    Computes the Azimuthal Equidistant Projection of input point in 3D Cartesian Coordinates.
+    Imagine a plane being placed against (tangent to) a globe. If
+    a light source inside the globe projects the graticule onto
+    the plane the result would be a planar, or azimuthal, map
+    projection.
 
-def create_topo_map(channel_values, electrode_positions, channel_names, grid_resolution=32):
+    :param pos: position in 3D Cartesian coordinates
+    :return: projected coordinates using Azimuthal Equidistant Projection
+    """
+    [r, elev, az] = cart2sph(pos[0], pos[1], pos[2])
+    return pol2cart(az, math.pi / 2 - elev)
+
+def create_topo_map(channel_values, channel_names, grid_resolution=32):
     """
     Create 2D topological maps using Clough-Tocher interpolation.
     
@@ -317,59 +297,55 @@ def create_topo_map(channel_values, electrode_positions, channel_names, grid_res
     Returns:
         2D topological map (grid_resolution, grid_resolution).
     """
-    # Prepare coordinates and values
-    x, y, values = [], [], []
-    for ch_name, val in zip(channel_names, channel_values):
-        if ch_name in electrode_positions:
-            x.append(electrode_positions[ch_name][0])  # x-coordinate
-            y.append(electrode_positions[ch_name][1])  # y-coordinate
-            values.append(val)
     
-    x = np.array(x)
-    y = np.array(y)
-    values = np.array(values)
+    # get electrode positions from the channel names
+    montage = mne.channels.make_standard_montage("standard_1020")
+    locs_2d = []
+    for ch in channel_names:
+        if ch in montage.ch_names:
+            coords = montage.get_positions()["ch_pos"][ch]
+            locs_2d.append(azim_proj(coords))
     
-    # Normalize coordinates to [0, 1] range
-    x = (x - x.min()) / (x.max() - x.min())
-    y = (y - y.min()) / (y.max() - y.min())
+    locs_2d_final = np.array(locs_2d)
+
+    # Create grid for interpolation
+    grid_x, grid_y = np.mgrid[
+        min(locs_2d_final[:, 0]):max(locs_2d_final[:, 0]):grid_resolution * 1j,
+        min(locs_2d_final[:, 1]):max(locs_2d_final[:, 1]):grid_resolution * 1j
+    ]
     
-    # Create Clough-Tocher interpolator
-    points = np.column_stack((x, y))  # Shape: (n_points, 2)
-    interpolator = CloughTocher2DInterpolator(points, values, fill_value=np.nan)
-    
-    # Generate grid
-    xi = yi = np.linspace(0, 1, grid_resolution)
-    xi, yi = np.meshgrid(xi, yi)
-    zi = interpolator(xi, yi)
-    
-    # Fill NaN values (if any) with nearest neighbor
-    if np.isnan(zi).any():
-        from scipy.interpolate import NearestNDInterpolator
-        nearest_interp = NearestNDInterpolator(points, values)
-        zi[np.isnan(zi)] = nearest_interp(np.column_stack([xi.ravel(), yi.ravel()]))[np.isnan(zi).ravel()]
-    
-    return zi
+    # Prepare the output images
+    images = []
+    for i in range(channel_values.shape[0]):  # For each sample in the batch
+        # Interpolate using cubic interpolation (like griddata with 'cubic' method)
+        interpolated_image = griddata(locs_2d_final, channel_values[i, :], (grid_x, grid_y), method='cubic', fill_value=np.nan)
+        images.append(interpolated_image)
+
+    images = np.stack(images, axis=0)
+
+    # Scale non-NaN values
+    images[~np.isnan(images)] = scale(images[~np.isnan(images)])
+
+    # Replace NaNs with zero or another fill value
+    images = np.nan_to_num(images, nan=0)
+
+    return images
 
 # Bandpass filter the data and segment the data into windows
 # extract the alpha power for each channel in each window and apply channel-wise normalization
-def preprocess(subjects_data, electrode_positions, channel_names):
+def preprocess(subjects_data, channel_names):
     print("preprocess begin")
     for subject_data in subjects_data:
         for trial in subject_data['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
-            
             trial['eeg'] = bandpass_filter(eeg_data, lowcut=8.0, highcut=13.0, fs=128)
             trial['eeg'] = segment_eeg_data(trial)
             trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
             trial['eeg'] = normalize_data(trial['eeg'])
+
             # create topo map for each window
-            topomaps = []
-            for window in trial['eeg']:
-                window = create_topo_map(window, electrode_positions, channel_names)
-                topomaps.append(window)
-            
-            trial['eeg'] = np.array(topomaps)
-            
+            trial['eeg'] = create_topo_map(trial['eeg'], channel_names)
+    
     print("preprocess complete")
     
     window = subjects_data[0]['trials'][0]['eeg'][0]
@@ -589,13 +565,13 @@ if __name__ == "__main__":
     
     print("Loading AAD data...")
     try:
-        subjects_data, electrode_positions, channel_names = load_DTU(data_DTU) 
+        subjects_data, channel_names = load_kul(data_KUL) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
     print(f"Loaded {len(subjects_data)} subjects.")
 
-    subjects_data = preprocess(subjects_data, electrode_positions, channel_names)
+    subjects_data = preprocess(subjects_data, channel_names)
 
     # Prepare data for cross-validation
     X, y, groups = [], [], []
@@ -647,7 +623,7 @@ if __name__ == "__main__":
     
     # Initialize model, loss, optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Rayanet().to(device)
+    model = EEGNet2().to(device)
     criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
     optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=3e-4)
     
@@ -685,6 +661,8 @@ if __name__ == "__main__":
     shap_values = explainer.shap_values(test_samples)
     shap.image_plot(shap_values, test_samples.cpu().numpy())
 
+    plt.savefig("shap_plot.png")
+    plt.close()
 
     # # leave one subject out cross-validation
     # logo = LeaveOneGroupOut()
