@@ -322,7 +322,7 @@ if __name__ == "__main__":
 
     # leave one trial out cross validation
     logo = LeaveOneGroupOut()
-    epochs = 20
+    epochs = 25
 
     for train_idx, test_idx in logo.split(X, y, groups):
         X_train, X_test = X[train_idx], X[test_idx]
@@ -342,9 +342,8 @@ if __name__ == "__main__":
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        torch.cuda.empty_cache()  # Add before model instantiation if using GPU
         num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
         model = EEGNet2(num_classes=2, num_channels=num_channels, input_size=num_timesteps).to(device)
 

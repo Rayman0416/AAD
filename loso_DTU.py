@@ -116,41 +116,36 @@ def preprocess(subjects):
 # -----------------------------
 # 2 convolutional layer
 class EEGNet(nn.Module):
-    def __init__(self, num_classes=2):
+    def __init__(self, in_channels=1):
         super(EEGNet, self).__init__()
 
-        self.conv1 = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=64, kernel_size=15, stride=2, padding=7),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2))
+        self.features = nn.Sequential(
+            # Input: (in_channels) x 32 x 32
+            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(kernel_size=2, stride=2),  
+            nn.Dropout(0.1)
+        )
         
-        self.conv2 = nn.Sequential(
-            nn.Conv1d(64, 128, kernel_size=7, stride=1, padding=3),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2))
-        
-        self.conv3 = nn.Sequential(
-            nn.Conv1d(128, 256, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2))
-        
-        self.fc = nn.Sequential(
-            nn.Linear(256 * 20, 128),  # Adjust input dim based on conv output
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(128, num_classes))
+        # Classifier: flatten the features and pass through fully connected layers
+        self.classifier = nn.Sequential(
+            nn.Linear(16*16*32, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(512, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, 2)
+        )
     
     def forward(self, x):
-        x = x.unsqueeze(1) # change shape -> (batch_size, 1, num_timesteps, num_channels)
+        x = x.unsqueeze(1)
 
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = x.view(x.size(0), -1)  # Flatten
-        x = self.fc(x)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = self.classifier(x)
         return x
 
 # 3 convolutional layer
@@ -307,8 +302,8 @@ if __name__ == "__main__":
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # model = EEGNet(num_channels=num_channels, num_timesteps=num_timesteps, num_classes=2).to(device)
-        model = EEGNet(num_classes=2).to(device)
+        num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
+        model = EEGNet2(num_classes=2, num_channels=num_channels, input_size=num_timesteps).to(device)
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003)

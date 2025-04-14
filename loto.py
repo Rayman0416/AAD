@@ -360,6 +360,7 @@ if __name__ == "__main__":
         # print(X_train.shape, X_test.shape)
         # print(np.bincount(y_train))
 
+        
         X_train, X_val, y_train, y_val = train_test_split(
             X_train, y_train, test_size=0.1, stratify=y_train, random_state=42
         )
@@ -380,7 +381,7 @@ if __name__ == "__main__":
         model = EEGNet2(num_classes=2, num_channels=num_channels, input_size=num_timesteps).to(device)
 
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.0003)
+        optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
 
         # Training loop
         for epoch in range(epochs):

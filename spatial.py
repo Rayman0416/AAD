@@ -205,10 +205,9 @@ def compute_alpha_power(eeg_data, sfreq=128):
     Returns:
         alpha_power: (n_samples, n_channels)
     """
-    print("eeg shape: ", eeg_data.shape)
     n_samples, window_length, n_channels = eeg_data.shape
     
-    alpha_low = 8
+    alpha_low = 1
     alpha_high = 13
     frequency_resolution = sfreq / window_length
     point_low = math.ceil(alpha_low / frequency_resolution)
@@ -338,7 +337,7 @@ def preprocess(subjects_data, channel_names):
     for subject_data in subjects_data:
         for trial in subject_data['trials']:
             eeg_data = trial['eeg']  # EEG data (NumPy array)
-            trial['eeg'] = bandpass_filter(eeg_data, lowcut=8.0, highcut=13.0, fs=128)
+            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
             trial['eeg'] = segment_eeg_data(trial)
             trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
             trial['eeg'] = normalize_data(trial['eeg'])
@@ -625,7 +624,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = EEGNet2().to(device)
     criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
-    optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=3e-4)
+    optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
     
     # Training loop for 10 epochs
     num_epochs = 50
@@ -633,13 +632,9 @@ if __name__ == "__main__":
     bet_model = None
     
     for epoch in range(num_epochs):
-        # Training
         train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-        print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
-        
-        # Validation
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
         
         # Test (only for best model)
         if val_acc > best_val_acc:
