@@ -9,10 +9,12 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.model_selection import train_test_split
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import griddata
 from sklearn.preprocessing import scale
+from collections import defaultdict
 
 class EEGDataset(Dataset):
     def __init__(self, eeg_data, labels):
@@ -24,10 +26,10 @@ class EEGDataset(Dataset):
 
     def __getitem__(self, idx):
         return (
-            # torch.tensor(self.eeg_data[idx], dtype=torch.float32),
-            # torch.tensor(self.labels[idx], dtype=torch.long),
-            self.eeg_data[idx].clone().detach(),  # Recommended copy method
-            self.labels[idx].clone().detach()
+            torch.tensor(self.eeg_data[idx], dtype=torch.float32),
+            torch.tensor(self.labels[idx], dtype=torch.long),
+            # self.eeg_data[idx].clone().detach(),  # Recommended copy method
+            # self.labels[idx].clone().detach()
         )
     
 # Load in first 8 trials of eeg data for each subject and extract 2D electrode coordinates
@@ -289,7 +291,6 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32):
     
     Args:
         channel_values: 1D array of alpha power values (n_channels,).
-        electrode_positions: Dictionary of electrode positions {name: [x, y]}.
         channel_names: List of channel names matching channel_values.
         grid_resolution: Size of output 2D map (grid_resolution x grid_resolution).
         
@@ -353,6 +354,45 @@ def preprocess(subjects_data, channel_names):
     save_topo_map_image(window, "./topomap6.png")
     # create 2d topo maps from electrode positions
     return subjects_data
+
+def save_topo_pixel_map(channel_values, channel_names, resolution=32, cmap='viridis', filename='topo_pixel_map.png'):
+    montage = mne.channels.make_standard_montage("standard_1020")
+    
+    # Get 2D projected electrode positions
+    locs_2d = []
+    for ch in channel_names:
+        if ch in montage.ch_names:
+            coords = montage.get_positions()["ch_pos"][ch]
+            locs_2d.append(azim_proj(coords))
+    
+    locs_2d = np.array(locs_2d)
+
+    # Normalize coordinates to image grid
+    min_x, max_x = locs_2d[:, 0].min(), locs_2d[:, 0].max()
+    min_y, max_y = locs_2d[:, 1].min(), locs_2d[:, 1].max()
+    
+    norm_x = ((locs_2d[:, 0] - min_x) / (max_x - min_x) * (resolution - 1)).astype(int)
+    norm_y = ((locs_2d[:, 1] - min_y) / (max_y - min_y) * (resolution - 1)).astype(int)
+
+    # Create a blank image
+    image = np.zeros((resolution, resolution))
+
+    channel_values = np.array(channel_values).flatten()
+
+    # Place values in exact pixel positions
+    for val, x, y in zip(channel_values, norm_x, norm_y):
+        image[y, x] = val  # Note: y is row, x is column
+
+    # Plot and save image
+    plt.figure(figsize=(4, 4))
+    plt.imshow(image, cmap=cmap, origin='lower')
+    plt.colorbar(label='Channel Value')
+    plt.title('2D Channel positions')
+    plt.xticks([]); plt.yticks([])
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+
+    return image  # Optional: return for inspection
 
 # save image of a topographical map of the alpha power range of signals
 def save_topo_map_image(topo_map: np.ndarray,
@@ -558,13 +598,51 @@ def evaluate(model, dataloader, criterion, device):
 
     return total_loss / len(dataloader.dataset), correct / len(dataloader.dataset)
 
+# Project EEG channels into 2D space using azim_proj
+def get_channel_pixel_mapping(channel_names, grid_size=32):
+    montage = mne.channels.make_standard_montage("standard_1020")
+    ch_pos = montage.get_positions()["ch_pos"]
+    xy_coords = {}
+    for ch in channel_names:
+        if ch in ch_pos:
+            x, y = azim_proj(ch_pos[ch])
+            xy_coords[ch] = (x, y)
+
+    # Normalize coords to grid indices (0 to grid_size-1)
+    xs = np.array([coord[0] for coord in xy_coords.values()])
+    ys = np.array([coord[1] for coord in xy_coords.values()])
+    x_min, x_max = xs.min(), xs.max()
+    y_min, y_max = ys.min(), ys.max()
+
+    pixel_map = {}
+    for ch, (x, y) in xy_coords.items():
+        norm_x = int((x - x_min) / (x_max - x_min) * (grid_size - 1))
+        norm_y = int((y - y_min) / (y_max - y_min) * (grid_size - 1))
+        pixel_map[ch] = (norm_y, norm_x)  # Note: imshow is row-major (y, x) (row, column)
+
+    return pixel_map
+
+# Compute average SHAP value for each channel's pixel location
+def compute_channel_shap_importance(shap_maps, pixel_map):
+    channel_scores = defaultdict(list)
+    for sample_map in shap_maps: # shape: (1, 32, 32)
+        # take absolute value because both positive and negative values are important
+        sample_map = np.abs(sample_map[0])  # shape: (32, 32)
+        for ch, (i, j) in pixel_map.items():
+            channel_scores[ch].append(sample_map[i, j])
+
+    # Compute mean SHAP value for each channel
+    channel_mean_shap = {ch: np.mean(vals) for ch, vals in channel_scores.items()}
+    return sorted(channel_mean_shap.items(), key=lambda x: x[1], reverse=True)
+
+
 if __name__ == "__main__":
     data_KUL = "./KUL"  # KUL data dir
     data_DTU = "./DTU"  # DTU data dir
     
     print("Loading AAD data...")
     try:
-        subjects_data, channel_names = load_kul(data_KUL) 
+        subjects_data, channel_names = load_DTU(data_DTU) 
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
@@ -575,139 +653,168 @@ if __name__ == "__main__":
     # Prepare data for cross-validation
     X, y, groups = [], [], []
 
-    for i, subject in enumerate(subjects_data):
+    # Group trials by trial_counter
+    trial_groups = defaultdict(list)
+
+    for subject in subjects_data:
+        trial_counter = 0
         for trial in subject['trials']:
+            trial_groups[trial_counter].append(trial)
+            trial_counter += 1
+
+    # Create subsets of 5 trials each
+    subset_size = 5
+    trial_counters = sorted(trial_groups.keys())  # Ensure trials are sorted
+    trial_subsets = []
+
+    for i in range(0, len(trial_counters), subset_size):
+        subset = []
+        for j in range(i, min(i + subset_size, len(trial_counters))):
+            subset.extend(trial_groups[trial_counters[j]])
+        trial_subsets.append(subset)
+
+    # Process subsets to extract X, y, and groups
+    subset_id = 0  # Unique identifier for each subset
+    for subset in trial_subsets:
+        for trial in subset:
             eeg_windows = trial['eeg']  # Shape: (windows, time_steps, channels)
-            num_windows = eeg_windows.shape[0]  # Get number of windows
-
-            # Reshape each window to (1, time_steps, channels) and add to X
+            trial_label = trial['label']
+            
             for window in eeg_windows:
-                X.append(window)  # Add a new axis for channel dim
+                X.append(window)       # Add EEG window (shape: time_steps, channels)
+                y.append(trial_label)  # Assign label
+                groups.append(subset_id)  # Assign all windows to the subset group
 
-            # Repeat the label for each window
-            y.extend([trial['label']] * num_windows)
-
-            # Repeat the subject index for each window
-            groups.extend([i] * num_windows)
+        subset_id += 1  # Increment subset ID for next group
 
     # Convert to NumPy arrays
     X = np.array(X)  # Shape: (total_windows, 1, time_steps, channels)
     y = np.array(y)  # labels for each window
     groups = np.array(groups) # subject index for each window
-    print(X.shape, y.shape, len(groups))
+    print("X shape: ", X.shape)
+    print("y shape: ", y.shape)
+    print("groups len: ", len(groups))
 
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.2, stratify=y
-    )
+    # X_train, X_temp, y_train, y_temp = train_test_split(
+    #     X, y, test_size=0.2, stratify=y
+    # )
     
-    # Second split: 10% validation, 10% test (from the 20% temp)
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, stratify=y_temp
-    )
+    # # Second split: 10% validation, 10% test (from the 20% temp)
+    # X_val, X_test, y_val, y_test = train_test_split(
+    #     X_temp, y_temp, test_size=0.5, stratify=y_temp
+    # )
     
-    print(f"Train: {X_train.shape[0]} samples")
-    print(f"Validation: {X_val.shape[0]} samples")
-    print(f"Test: {X_test.shape[0]} samples")
+    # print(f"Train: {X_train.shape[0]} samples")
+    # print(f"Validation: {X_val.shape[0]} samples")
+    # print(f"Test: {X_test.shape[0]} samples")
     
-    # Convert to PyTorch datasets
-    train_dataset = EEGDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
-    val_dataset = EEGDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
-    test_dataset = EEGDataset(torch.FloatTensor(X_test), torch.LongTensor(y_test))
+    # # Convert to PyTorch datasets
+    # train_dataset = EEGDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
+    # val_dataset = EEGDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
+    # test_dataset = EEGDataset(torch.FloatTensor(X_test), torch.LongTensor(y_test))
     
-    # Create dataloaders
-    batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    # # Create dataloaders
+    # batch_size = 32
+    # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    # Initialize model, loss, optimizer
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = EEGNet2().to(device)
-    criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
-    optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
+    # # Initialize model, loss, optimizer
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = EEGNet2().to(device)
+    # criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
+    # optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
     
-    # Training loop for 10 epochs
-    num_epochs = 50
-    best_val_acc = 0
-    bet_model = None
+    # # Training loop for 10 epochs
+    # num_epochs = 50
+    # best_val_acc = 0
+    # best_model = None
     
-    for epoch in range(num_epochs):
-        train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+    # for epoch in range(num_epochs):
+    #     train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
+    #     val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+    #     print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
         
-        # Test (only for best model)
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_model = model.state_dict()
+    #     # Test (only for best model)
+    #     if val_acc > best_val_acc:
+    #         best_val_acc = val_acc
+    #         best_model = model.state_dict()
 
-    # Calculate test accuracy
-    model.load_state_dict(best_model)
-    test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-    print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+    # # Calculate test accuracy
+    # model.load_state_dict(best_model)
+    # test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+    # print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
-    background, _ = next(iter(train_loader))
-    background = background[:50].to(device)
+    # background, _ = next(iter(train_loader))
+    # background = background[:50].to(device)
 
-    test_samples, _ = next(iter(test_loader))
-    test_samples = test_samples[:10].to(device)  # Use a small batch for explanation
+    # test_samples, _ = next(iter(test_loader))
+    # test_samples = test_samples[:10].to(device)  # Use a small batch for explanation
 
-    explainer = shap.DeepExplainer(model, background)
-    shap_values = explainer.shap_values(test_samples)
-    shap.image_plot(shap_values, test_samples.cpu().numpy())
+    # explainer = shap.DeepExplainer(model, background)
+    # shap_values = explainer.shap_values(test_samples)
+    # shap.image_plot(shap_values, test_samples.cpu().numpy())
 
-    plt.savefig("shap_plot.png")
-    plt.close()
+    # plt.savefig("shap_plot.png")
+    # plt.close()
 
-    # # leave one subject out cross-validation
-    # logo = LeaveOneGroupOut()
-    # epochs = 50
-    # results = []
+    # leave one subject out cross-validation
+    logo = LeaveOneGroupOut()
+    epochs = 20
+    best_val_acc = 0
+    best_model = None
+    results = []
 
-    # for train_idx, test_idx in logo.split(X, y, groups):
-    #     X_train, X_test = X[train_idx], X[test_idx]
-    #     y_train, y_test = y[train_idx], y[test_idx]
-    #     groups_train = groups[train_idx]
-    #     train_idx, val_idx = next(logo.split(X_train, y_train, groups_train))
-    #     X_train, X_val = X[train_idx], X[val_idx]
-    #     y_train, y_val = y[train_idx], y[val_idx]
-    #     print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
+    for train_idx, test_idx in logo.split(X, y, groups):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        groups_train = groups[train_idx]
 
-    #     train_dataset = EEGDataset(X_train, y_train)
-    #     test_dataset = EEGDataset(X_test, y_test)
-    #     val_dataset = EEGDataset(X_val, y_val)
-    #     num_channels = X_train.shape[2]
-    #     num_timesteps = X_train.shape[1]
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_test, y_test, test_size=0.5, stratify=y_test
+        )
 
-    #     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    #     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    #     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
+        print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
 
-    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #     num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
-    #     model = Rayanet().to(device)
+        train_dataset = EEGDataset(X_train, y_train)
+        test_dataset = EEGDataset(X_test, y_test)
+        val_dataset = EEGDataset(X_val, y_val)
+        num_channels = X_train.shape[2]
+        num_timesteps = X_train.shape[1]
 
-    #     # assign weights to classes to counter class imbalance
-    #     class_counts = np.bincount(y_train)
-    #     class_weights = 1. / class_counts
-    #     criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
-    #     max_norm = 1.0  # Set a threshold for the gradient norm
-    #     utils.clip_grad_norm_(model.parameters(), max_norm)
-    #     optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
 
-    #     # Training loop
-    #     for epoch in range(epochs):
-    #         train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-    #         print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
-    #         with torch.no_grad():
-    #             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-    #             print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
+        model = Rayanet().to(device)
 
-    #     # Evaluation
-    #     test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-    #     results.append(test_acc)
-    #     print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+        # assign weights to classes to counter class imbalance
+        class_counts = np.bincount(y_train)
+        class_weights = 1. / class_counts
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = EEGNet2().to(device)
+        criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
+        optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
+
+        # Training loop
+        for epoch in range(epochs):
+            train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
+            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+            
+            # Test (only for best model)
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_model = model.state_dict()
+
+        # Evaluation
+        model.load_state_dict(best_model)
+        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+        results.append(test_acc)
+        print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
     
-    # print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
 
 
