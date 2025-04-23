@@ -103,6 +103,8 @@ def load_kul(data_dir):
     if not subjects_data:
         raise ValueError("No valid EEG data found.")
 
+    subjects_data.sort(key=lambda x: x['name'])
+
     return subjects_data, channel_names
 
 def load_DTU(data_dir):
@@ -138,7 +140,12 @@ def load_DTU(data_dir):
         
             if subject_trials:
                 subjects_data.append({'name': file_name, 'trials': subject_trials})
-                
+    
+    if not subjects_data:
+        raise ValueError("No valid EEG data found.")
+    
+    subjects_data.sort(key=lambda x: x['name'])
+
     return subjects_data, channel_names
 
 def segment_eeg_data(trial, window_size=128, overlap=0.5):
@@ -223,23 +230,6 @@ def compute_alpha_power(eeg_data, sfreq=128):
         alpha_data.append(window_data)
     alpha_data = np.stack(alpha_data, axis=0)
     return alpha_data
-
-    # # Compute FFT and get magnitude spectrum
-    # fft_vals = np.fft.fft(eeg_data, n=window_length, axis=1)
-    # fft_vals = np.abs(fft_vals) / window_length
-    
-    # freqs = np.fft.fftfreq(window_length, d=1/sfreq)  # Get frequency bins
-    # positive_freqs = freqs[:window_length//2]  # Keep only positive frequencies
-
-    # point_low = np.argmax(positive_freqs >= 8)   # First index where freq ≥ 8 Hz
-    # point_high = np.argmax(positive_freqs > 13)  # First index where freq > 13 Hz
-
-    # # Compute power in alpha band
-    # alpha_power = np.sum(np.power(fft_vals[:, point_low:point_high, :], 2), axis=1)
-    
-    # print("alpha power shape: ", alpha_power.shape)
-    # print(alpha_power)
-    # return alpha_power
 
 # z-score channel-wise normalization
 def normalize_data(eeg_data):
@@ -333,66 +323,20 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32):
 
 # Bandpass filter the data and segment the data into windows
 # extract the alpha power for each channel in each window and apply channel-wise normalization
-def preprocess(subjects_data, channel_names):
+def preprocess(subject, channel_names):
     print("preprocess begin")
-    for subject_data in subjects_data:
-        for trial in subject_data['trials']:
-            eeg_data = trial['eeg']  # EEG data (NumPy array)
-            trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
-            trial['eeg'] = segment_eeg_data(trial)
-            trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
-            trial['eeg'] = normalize_data(trial['eeg'])
+    for trial in subject['trials']:
+        eeg_data = trial['eeg']  # EEG data (NumPy array)
+        trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
+        trial['eeg'] = segment_eeg_data(trial)
+        trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
+        trial['eeg'] = normalize_data(trial['eeg'])
 
-            # create topo map for each window
-            trial['eeg'] = create_topo_map(trial['eeg'], channel_names)
+        # create topo map for each window
+        trial['eeg'] = create_topo_map(trial['eeg'], channel_names)
     
     print("preprocess complete")
-    
-    window = subjects_data[0]['trials'][0]['eeg'][0]
-    save_topo_map_image(window, "./topomap.png")
-    window = subjects_data[6]['trials'][6]['eeg'][6]
-    save_topo_map_image(window, "./topomap6.png")
-    # create 2d topo maps from electrode positions
-    return subjects_data
-
-def save_topo_pixel_map(channel_values, channel_names, resolution=32, cmap='viridis', filename='topo_pixel_map.png'):
-    montage = mne.channels.make_standard_montage("standard_1020")
-    
-    # Get 2D projected electrode positions
-    locs_2d = []
-    for ch in channel_names:
-        if ch in montage.ch_names:
-            coords = montage.get_positions()["ch_pos"][ch]
-            locs_2d.append(azim_proj(coords))
-    
-    locs_2d = np.array(locs_2d)
-
-    # Normalize coordinates to image grid
-    min_x, max_x = locs_2d[:, 0].min(), locs_2d[:, 0].max()
-    min_y, max_y = locs_2d[:, 1].min(), locs_2d[:, 1].max()
-    
-    norm_x = ((locs_2d[:, 0] - min_x) / (max_x - min_x) * (resolution - 1)).astype(int)
-    norm_y = ((locs_2d[:, 1] - min_y) / (max_y - min_y) * (resolution - 1)).astype(int)
-
-    # Create a blank image
-    image = np.zeros((resolution, resolution))
-
-    channel_values = np.array(channel_values).flatten()
-
-    # Place values in exact pixel positions
-    for val, x, y in zip(channel_values, norm_x, norm_y):
-        image[y, x] = val  # Note: y is row, x is column
-
-    # Plot and save image
-    plt.figure(figsize=(4, 4))
-    plt.imshow(image, cmap=cmap, origin='lower')
-    plt.colorbar(label='Channel Value')
-    plt.title('2D Channel positions')
-    plt.xticks([]); plt.yticks([])
-    plt.savefig(filename, bbox_inches='tight')
-    plt.close()
-
-    return image  # Optional: return for inspection
+    return subject
 
 # save image of a topographical map of the alpha power range of signals
 def save_topo_map_image(topo_map: np.ndarray,
@@ -635,43 +579,15 @@ def compute_channel_shap_importance(shap_maps, pixel_map):
     channel_mean_shap = {ch: np.mean(vals) for ch, vals in channel_scores.items()}
     return sorted(channel_mean_shap.items(), key=lambda x: x[1], reverse=True)
 
-
-if __name__ == "__main__":
-    data_KUL = "./KUL"  # KUL data dir
-    data_DTU = "./DTU"  # DTU data dir
-    
-    print("Loading AAD data...")
-    try:
-        subjects_data, channel_names = load_DTU(data_DTU) 
-    except Exception as e:
-        raise RuntimeError(f"Failed to load data: {e}")
-
-    print(f"Loaded {len(subjects_data)} subjects.")
-
-    subjects_data = preprocess(subjects_data, channel_names)
-
-    # Prepare data for cross-validation
+# Group trials into subsets of 5 trials each
+def group_DTU_trials(subject):
     X, y, groups = [], [], []
 
-    # Group trials by trial_counter
-    trial_groups = defaultdict(list)
-
-    for subject in subjects_data:
-        trial_counter = 0
-        for trial in subject['trials']:
-            trial_groups[trial_counter].append(trial)
-            trial_counter += 1
-
-    # Create subsets of 5 trials each
     subset_size = 5
-    trial_counters = sorted(trial_groups.keys())  # Ensure trials are sorted
-    trial_subsets = []
-
-    for i in range(0, len(trial_counters), subset_size):
-        subset = []
-        for j in range(i, min(i + subset_size, len(trial_counters))):
-            subset.extend(trial_groups[trial_counters[j]])
-        trial_subsets.append(subset)
+    trial_subsets = [
+        subject["trials"][i:i + subset_size]
+        for i in range(0, len(subject["trials"]), subset_size)
+    ]
 
     # Process subsets to extract X, y, and groups
     subset_id = 0  # Unique identifier for each subset
@@ -687,6 +603,66 @@ if __name__ == "__main__":
 
         subset_id += 1  # Increment subset ID for next group
 
+    return X, y, groups
+
+# Group window data into trials
+def group_KUL_trials(subject):
+    X, y, groups = [], [], []
+    trial_counter = 0 
+    for trial in subject['trials']:
+        eeg_windows = trial['eeg']  # Shape: (windows, resolution, resolution)
+        
+        # add each window to the dataset and assign corresponding label
+        for window in eeg_windows:
+            X.append(window)
+            y.append(trial['label'])
+            groups.append(trial_counter)
+        
+        trial_counter += 1
+    
+    return X, y, groups
+
+if __name__ == "__main__":
+    data_KUL = "./KUL"  # KUL data dir
+    data_DTU = "./DTU"  # DTU data dir
+
+    # choose dataset and subject number to test
+    dataset = input("Enter dataset (KUL or DTU): ").strip().upper()
+    if dataset == "DTU":
+        subject_nr = input("Enter subject number (1-18): ")
+    elif dataset == "KUL":
+        subject_nr = input("Enter subject number (1-16): ")
+
+    # Load the dataset
+    if dataset == "DTU":
+        print("Loading DTU AAD data...")
+        try:
+            subjects_data, channel_names = load_DTU(data_DTU) 
+        except Exception as e:
+            raise RuntimeError(f"Failed to load data: {e}")
+    elif dataset == "KUL":
+        print("Loading KUL AAD data...")
+        try:
+            subjects_data, channel_names = load_kul(data_KUL)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load data: {e}")
+
+    print(f"Loaded {len(subjects_data)} subjects from {dataset} dataset.")
+
+    subject = subjects_data[int(subject_nr) - 1]  # Select subject by number
+    print(f"Processing subject {subject['name']}...")
+
+    subject = preprocess(subject, channel_names)
+
+    # Prepare data for cross-validation
+    X, y, groups = [], [], []
+
+    if dataset == "DTU":
+        X, y, groups = group_DTU_trials(subject)
+    elif dataset == "KUL":
+        X, y, groups = group_KUL_trials(subject)
+
+
     # Convert to NumPy arrays
     X = np.array(X)  # Shape: (total_windows, 1, time_steps, channels)
     y = np.array(y)  # labels for each window
@@ -695,50 +671,49 @@ if __name__ == "__main__":
     print("y shape: ", y.shape)
     print("groups len: ", len(groups))
 
-    # X_train, X_temp, y_train, y_temp = train_test_split(
+    # X_train, X_test, y_train, y_test = train_test_split(
     #     X, y, test_size=0.2, stratify=y
     # )
-    
-    # # Second split: 10% validation, 10% test (from the 20% temp)
-    # X_val, X_test, y_val, y_test = train_test_split(
-    #     X_temp, y_temp, test_size=0.5, stratify=y_temp
+
+    # X_train, X_val, y_train, y_val = train_test_split(
+    #     X_train, y_train, test_size=0.2, stratify=y_train
     # )
-    
-    # print(f"Train: {X_train.shape[0]} samples")
-    # print(f"Validation: {X_val.shape[0]} samples")
-    # print(f"Test: {X_test.shape[0]} samples")
-    
-    # # Convert to PyTorch datasets
-    # train_dataset = EEGDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
-    # val_dataset = EEGDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
-    # test_dataset = EEGDataset(torch.FloatTensor(X_test), torch.LongTensor(y_test))
-    
-    # # Create dataloaders
-    # batch_size = 32
-    # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-    
-    # # Initialize model, loss, optimizer
+
+    # train_dataset = EEGDataset(X_train, y_train)
+    # test_dataset = EEGDataset(X_test, y_test)
+    # val_dataset = EEGDataset(X_val, y_val)
+
+    # train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    # test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    # val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
+
+    # class_counts = np.bincount(y_train)
+    # class_weights = 1. / class_counts
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # model = EEGNet2().to(device)
     # criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
     # optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
-    
-    # # Training loop for 10 epochs
-    # num_epochs = 50
+
+    # # Training loop
+    # epochs = 20
     # best_val_acc = 0
     # best_model = None
-    
-    # for epoch in range(num_epochs):
+    # results = []
+    # for epoch in range(epochs):
     #     train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
     #     val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-    #     print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+    #     print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
         
     #     # Test (only for best model)
     #     if val_acc > best_val_acc:
     #         best_val_acc = val_acc
     #         best_model = model.state_dict()
+
+    # # Evaluation
+    # model.load_state_dict(best_model)
+    # test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+    # results.append(test_acc)
+    # print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
     # # Calculate test accuracy
     # model.load_state_dict(best_model)
@@ -758,10 +733,10 @@ if __name__ == "__main__":
     # plt.savefig("shap_plot.png")
     # plt.close()
 
-    # leave one subject out cross-validation
+    # leave one trial out cross-validation
     logo = LeaveOneGroupOut()
-    epochs = 20
-    best_val_acc = 0
+    epochs = 50
+    best_train_loss = 2.0
     best_model = None
     results = []
 
@@ -770,25 +745,19 @@ if __name__ == "__main__":
         y_train, y_test = y[train_idx], y[test_idx]
         groups_train = groups[train_idx]
 
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_test, y_test, test_size=0.5, stratify=y_test
-        )
-
         print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
 
         train_dataset = EEGDataset(X_train, y_train)
         test_dataset = EEGDataset(X_test, y_test)
-        val_dataset = EEGDataset(X_val, y_val)
         num_channels = X_train.shape[2]
         num_timesteps = X_train.shape[1]
 
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
-        model = Rayanet().to(device)
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
+        # model = Rayanet().to(device)
 
         # assign weights to classes to counter class imbalance
         class_counts = np.bincount(y_train)
@@ -801,12 +770,11 @@ if __name__ == "__main__":
         # Training loop
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
             
             # Test (only for best model)
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
+            if train_loss < best_train_loss:
+                best_train_loss = train_loss
                 best_model = model.state_dict()
 
         # Evaluation
