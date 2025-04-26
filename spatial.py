@@ -671,81 +671,21 @@ if __name__ == "__main__":
     print("y shape: ", y.shape)
     print("groups len: ", len(groups))
 
-    # X_train, X_test, y_train, y_test = train_test_split(
-    #     X, y, test_size=0.2, stratify=y
-    # )
-
-    # X_train, X_val, y_train, y_val = train_test_split(
-    #     X_train, y_train, test_size=0.2, stratify=y_train
-    # )
-
-    # train_dataset = EEGDataset(X_train, y_train)
-    # test_dataset = EEGDataset(X_test, y_test)
-    # val_dataset = EEGDataset(X_val, y_val)
-
-    # train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    # test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    # val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
-
-    # class_counts = np.bincount(y_train)
-    # class_weights = 1. / class_counts
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = EEGNet2().to(device)
-    # criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
-    # optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
-
-    # # Training loop
-    # epochs = 20
-    # best_val_acc = 0
-    # best_model = None
-    # results = []
-    # for epoch in range(epochs):
-    #     train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-    #     val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-    #     print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-        
-    #     # Test (only for best model)
-    #     if val_acc > best_val_acc:
-    #         best_val_acc = val_acc
-    #         best_model = model.state_dict()
-
-    # # Evaluation
-    # model.load_state_dict(best_model)
-    # test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-    # results.append(test_acc)
-    # print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
-
-    # # Calculate test accuracy
-    # model.load_state_dict(best_model)
-    # test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-    # print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
-
-    # background, _ = next(iter(train_loader))
-    # background = background[:50].to(device)
-
-    # test_samples, _ = next(iter(test_loader))
-    # test_samples = test_samples[:10].to(device)  # Use a small batch for explanation
-
-    # explainer = shap.DeepExplainer(model, background)
-    # shap_values = explainer.shap_values(test_samples)
-    # shap.image_plot(shap_values, test_samples.cpu().numpy())
-
-    # plt.savefig("shap_plot.png")
-    # plt.close()
-
     # leave one trial out cross-validation
     logo = LeaveOneGroupOut()
-    epochs = 50
+    epochs = 20
     best_train_loss = 2.0
     best_model = None
     results = []
+    all_shap_values = []
+    all_test_inputs = []
 
     for train_idx, test_idx in logo.split(X, y, groups):
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
         groups_train = groups[train_idx]
 
-        print(f"Test subject(fold): {set(groups[i] for i in test_idx)}")
+        print(f"Trial (fold): {set(groups[i] for i in test_idx)}")
 
         train_dataset = EEGDataset(X_train, y_train)
         test_dataset = EEGDataset(X_test, y_test)
@@ -754,10 +694,6 @@ if __name__ == "__main__":
 
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # num_timesteps, num_channels = X_train.shape[1], X_train.shape[2]
-        # model = Rayanet().to(device)
 
         # assign weights to classes to counter class imbalance
         class_counts = np.bincount(y_train)
@@ -782,7 +718,32 @@ if __name__ == "__main__":
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
         results.append(test_acc)
         print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+
+        model.eval()
+        background = torch.from_numpy(X_train[:100]).float().to(device)  # background data for SHAP
+        explainer = shap.DeepExplainer(model, background)
+
+        X_test_tensor = torch.from_numpy(X_test).float().to(device)
+        shap_values_fold = explainer.shap_values(X_test_tensor) # shape: (windows, 32, 32, 1)
+        shap_values_fold = shap_values_fold.squeeze(-1) # Remove the last dimension
+
+        all_shap_values.append(shap_values_fold)
+        all_test_inputs.append(X_test)  # keep for later interpretation if needed
     
     print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+
+    # Concatenate across folds
+    final_shap_values = np.concatenate(all_shap_values, axis=0)
+    final_test_inputs = np.concatenate(all_test_inputs, axis=0)
+    print(f"Final SHAP shape: {final_shap_values.shape}")
+
+    # Average absolute SHAP across all samples
+    mean_shap_per_pixel = np.mean(np.abs(final_shap_values), axis=0)
+
+    plt.imshow(mean_shap_per_pixel, cmap='hot')
+    plt.colorbar()
+    plt.title("Mean SHAP Values per Pixel")
+    plt.savefig("shap_plot.png")
+    plt.close()
 
 
