@@ -214,7 +214,7 @@ def compute_alpha_power(eeg_data, sfreq=128):
     Returns:
         alpha_power: (n_samples, n_channels)
     """
-    n_samples, window_length, n_channels = eeg_data.shape
+    window_length = eeg_data.shape[1]
     
     alpha_low = 1
     alpha_high = 13
@@ -275,26 +275,34 @@ def azim_proj(pos):
     [r, elev, az] = cart2sph(pos[0], pos[1], pos[2])
     return pol2cart(az, math.pi / 2 - elev)
 
-def create_topo_map(channel_values, channel_names, grid_resolution=32):
+def create_topo_map(channel_values, channel_names, grid_resolution=32, reduced_channels=None):
     """
-    Create 2D topological maps using Clough-Tocher interpolation.
+    Create 2D (reduced) topological maps using cubic interpolation.
     
     Args:
-        channel_values: 1D array of alpha power values (n_channels,).
+        channel_values: array of alpha power values (windows, channel values).
         channel_names: List of channel names matching channel_values.
         grid_resolution: Size of output 2D map (grid_resolution x grid_resolution).
+        reduced_channels: List of channels to include in the map. If None, all channels are used.
         
     Returns:
         2D topological map (grid_resolution, grid_resolution).
     """
-    
     # get electrode positions from the channel names
     montage = mne.channels.make_standard_montage("standard_1020")
     locs_2d = []
-    for ch in channel_names:
-        if ch in montage.ch_names:
-            coords = montage.get_positions()["ch_pos"][ch]
-            locs_2d.append(azim_proj(coords))
+
+    # If reduced_channels is provided, create 2D locations for only those channels
+    if reduced_channels is None:
+        for ch in channel_names:
+            if ch in montage.ch_names:
+                coords = montage.get_positions()["ch_pos"][ch]
+                locs_2d.append(azim_proj(coords))
+    else:
+        for ch in reduced_channels:
+            if ch in montage.ch_names:
+                coords = montage.get_positions()["ch_pos"][ch]
+                locs_2d.append(azim_proj(coords))
     
     locs_2d_final = np.array(locs_2d)
 
@@ -306,7 +314,7 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32):
     
     # Prepare the output images
     images = []
-    for i in range(channel_values.shape[0]):  # For each sample in the batch
+    for i in range(channel_values.shape[0]):  # For each window in the batch
         # Interpolate using cubic interpolation (like griddata with 'cubic' method)
         interpolated_image = griddata(locs_2d_final, channel_values[i, :], (grid_x, grid_y), method='cubic', fill_value=np.nan)
         images.append(interpolated_image)
@@ -323,20 +331,21 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32):
 
 # Bandpass filter the data and segment the data into windows
 # extract the alpha power for each channel in each window and apply channel-wise normalization
+# create a topographical map for each window
 def preprocess(subject, channel_names):
     print("preprocess begin")
+    channel_values = []
     for trial in subject['trials']:
         eeg_data = trial['eeg']  # EEG data (NumPy array)
         trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
         trial['eeg'] = segment_eeg_data(trial)
         trial['eeg'] = compute_alpha_power(trial['eeg']) # feature extraction
+        channel_values.append(trial['eeg']) # keep for later creation of reduced maps
         trial['eeg'] = normalize_data(trial['eeg'])
-
-        # create topo map for each window
         trial['eeg'] = create_topo_map(trial['eeg'], channel_names)
     
     print("preprocess complete")
-    return subject
+    return subject, channel_values
 
 # save image of a topographical map of the alpha power range of signals
 def save_topo_map_image(topo_map: np.ndarray,
@@ -622,6 +631,68 @@ def group_KUL_trials(subject):
     
     return X, y, groups
 
+def reduce_channels(subject, shap_values, channel_names, channel_values):
+    """
+    Reduce the number of channels in the SHAP values to a smaller set.
+    
+    Args:
+        shap_values: SHAP values for each channel.
+        channel_names: List of channel names.
+        channel_values: Original channel values. (trials, windows, channel alpha values)
+        
+    Returns:
+        subject: data with reduced channels.
+    """
+
+    # Get the pixel mapping for the channels
+    pixel_map = get_channel_pixel_mapping(channel_names)
+    channel_shap_importance = {}
+
+    # Rank channels based on their SHAP values
+    for channel, (y, x) in pixel_map.items():
+        # Get the SHAP value for the channel's pixel
+        channel_shap = shap_values[y, x]
+
+        channel_shap_importance[channel] = channel_shap
+    
+    sorted_channel_shap = sorted(channel_shap_importance.items(), key=lambda x: x[1], reverse=True)
+    
+    for i, (channel, score) in enumerate(sorted_channel_shap):
+        print(f"Rank {i+1}: Channel {channel} - SHAP Value: {score:.4f}")
+    
+    # Select the top channels based on SHAP values top 50
+    top_channels = [channel for channel, _ in sorted_channel_shap[:50]]
+
+    channel_values = np.array(channel_values)  # Convert to NumPy array
+
+    # Delete removed channels from the channel values data
+    for channel_idx, channel in enumerate(channel_names):
+        if channel not in top_channels:
+            for trial_idx, trial in enumerate(channel_values):
+                for window_idx, window in enumerate(trial):
+                    window = np.delete(window, channel_idx, axis=0)
+                    channel_values[trial_idx, window_idx] = window
+
+    # Create new images with only the top channels
+    for trial, value in zip(subject['trials'], channel_values):
+        trial['eeg'] = create_topo_map(value, channel_names, reduced_channels=top_channels)
+    
+    save_topo_map_image(
+        trial['eeg'][0],  # Use the first trial for the image
+        output_filepath=f"topo_map_{subject['name']}.png",
+        title=f"Top Channels for {subject['name']}",
+        cmap='viridis',
+        show_axis=False,
+        colorbar=True,
+        dpi=150
+    )
+
+    return subject
+    
+
+    
+
+
 if __name__ == "__main__":
     data_KUL = "./KUL"  # KUL data dir
     data_DTU = "./DTU"  # DTU data dir
@@ -652,7 +723,7 @@ if __name__ == "__main__":
     subject = subjects_data[int(subject_nr) - 1]  # Select subject by number
     print(f"Processing subject {subject['name']}...")
 
-    subject = preprocess(subject, channel_names)
+    subject, channel_values = preprocess(subject, channel_names)
 
     # Prepare data for cross-validation
     X, y, groups = [], [], []
@@ -673,7 +744,7 @@ if __name__ == "__main__":
 
     # leave one trial out cross-validation
     logo = LeaveOneGroupOut()
-    epochs = 20
+    epochs = 10
     best_train_loss = 2.0
     best_model = None
     results = []
@@ -735,10 +806,13 @@ if __name__ == "__main__":
     # Concatenate across folds
     final_shap_values = np.concatenate(all_shap_values, axis=0)
     final_test_inputs = np.concatenate(all_test_inputs, axis=0)
-    print(f"Final SHAP shape: {final_shap_values.shape}")
+    print(f"concat SHAP shape: {final_shap_values.shape}")
 
     # Average absolute SHAP across all samples
     mean_shap_per_pixel = np.mean(np.abs(final_shap_values), axis=0)
+    print(f"mean SHAP shape: {mean_shap_per_pixel.shape}")
+
+    reduce_channels(subject, mean_shap_per_pixel, channel_names, channel_values)
 
     plt.imshow(mean_shap_per_pixel, cmap='hot')
     plt.colorbar()
