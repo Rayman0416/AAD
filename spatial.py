@@ -286,7 +286,7 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32, reduced_c
         reduced_channels: List of channels to include in the map. If None, all channels are used.
         
     Returns:
-        2D topological map (grid_resolution, grid_resolution).
+        2D topological maps (window, grid_resolution, grid_resolution).
     """
     # get electrode positions from the channel names
     montage = mne.channels.make_standard_montage("standard_1020")
@@ -661,21 +661,24 @@ def reduce_channels(subject, shap_values, channel_names, channel_values):
         print(f"Rank {i+1}: Channel {channel} - SHAP Value: {score:.4f}")
     
     # Select the top channels based on SHAP values top 50
-    top_channels = [channel for channel, _ in sorted_channel_shap[:50]]
+    top_channels = [channel for channel, _ in sorted_channel_shap[:32]]
+    top_channel_indices = [i for i, name in enumerate(channel_names) if name in top_channels]
 
     channel_values = np.array(channel_values)  # Convert to NumPy array
+    channel_values = channel_values[:, :, top_channel_indices]  # Select only the top channels
+    print("channel values shape: ", channel_values.shape)
 
-    # Delete removed channels from the channel values data
-    for channel_idx, channel in enumerate(channel_names):
-        if channel not in top_channels:
-            for trial_idx, trial in enumerate(channel_values):
-                for window_idx, window in enumerate(trial):
-                    window = np.delete(window, channel_idx, axis=0)
-                    channel_values[trial_idx, window_idx] = window
+    # Crate new subject data with only the top channels
+    new_trials = []
+    for trial, values in zip(subject['trials'], channel_values):
+        new_trials.append({'eeg': values, 'label': trial['label']})
 
+    new_subject = {'name': subject['name'], 'trials': new_trials}
+    
+    
     # Create new images with only the top channels
-    for trial, value in zip(subject['trials'], channel_values):
-        trial['eeg'] = create_topo_map(value, channel_names, reduced_channels=top_channels)
+    for trial in new_subject['trials']:
+        trial['eeg'] = create_topo_map(trial['eeg'], channel_names, reduced_channels=top_channels)
     
     save_topo_map_image(
         trial['eeg'][0],  # Use the first trial for the image
@@ -687,9 +690,7 @@ def reduce_channels(subject, shap_values, channel_names, channel_values):
         dpi=150
     )
 
-    return subject
-    
-
+    return new_subject
     
 
 
@@ -812,7 +813,73 @@ if __name__ == "__main__":
     mean_shap_per_pixel = np.mean(np.abs(final_shap_values), axis=0)
     print(f"mean SHAP shape: {mean_shap_per_pixel.shape}")
 
-    reduce_channels(subject, mean_shap_per_pixel, channel_names, channel_values)
+    subject = reduce_channels(subject, mean_shap_per_pixel, channel_names, channel_values)
+
+    # Train new CNN based on reduced channels
+    # Prepare data for cross-validation
+    X, y, groups = [], [], []
+
+    if dataset == "DTU":
+        X, y, groups = group_DTU_trials(subject)
+    elif dataset == "KUL":
+        X, y, groups = group_KUL_trials(subject)
+
+
+    # Convert to NumPy arrays
+    X = np.array(X)  # Shape: (total_windows, 1, time_steps, channels)
+    y = np.array(y)  # labels for each window
+    groups = np.array(groups) # subject index for each window
+
+    # leave one trial out cross-validation
+    logo = LeaveOneGroupOut()
+    epochs = 10
+    best_train_loss = 2.0
+    best_model = None
+    shap_results = []
+
+    for train_idx, test_idx in logo.split(X, y, groups):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        groups_train = groups[train_idx]
+
+        print(f"Trial (fold): {set(groups[i] for i in test_idx)}")
+
+        train_dataset = EEGDataset(X_train, y_train)
+        test_dataset = EEGDataset(X_test, y_test)
+        num_channels = X_train.shape[2]
+        num_timesteps = X_train.shape[1]
+
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+        # assign weights to classes to counter class imbalance
+        class_counts = np.bincount(y_train)
+        class_weights = 1. / class_counts
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = EEGNet2().to(device)
+        criterion = nn.BCEWithLogitsLoss().to(device)  # This loss expects raw logits
+        optimizer = optim.RMSprop(model.parameters(), lr=0.0003, weight_decay=3e-4)
+
+        # Training loop
+        for epoch in range(epochs):
+            train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
+            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            
+            # Test (only for best model)
+            if train_loss < best_train_loss:
+                best_train_loss = train_loss
+                best_model = model.state_dict()
+
+        # Evaluation
+        model.load_state_dict(best_model)
+        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+        shap_results.append(test_acc)
+
+        print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+    
+    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    print(f"\nMean Test Accuracy reduced channels: {np.mean(shap_results):.4f} ± {np.std(shap_results):.4f}")
+
 
     plt.imshow(mean_shap_per_pixel, cmap='hot')
     plt.colorbar()
