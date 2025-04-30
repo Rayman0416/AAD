@@ -1,0 +1,27 @@
+KUL loto
+s1 48 channels
+Mean Test Accuracy: 0.8081 ± 0.3245
+Mean Test Accuracy reduced channels: 0.5728 ± 0.3704
+
+s3
+Mean Test Accuracy: 0.7498 ± 0.3539
+Mean Test Accuracy reduced channels: 0.8194 ± 0.3122
+
+
+DTU loto
+s1 48 channels
+Mean Test Accuracy: 0.7485 ± 0.1742
+Mean Test Accuracy reduced channels: 0.7013 ± 0.2846
+
+s2
+Mean Test Accuracy: 0.7066 ± 0.1358
+Mean Test Accuracy reduced channels: 0.4515 ± 0.1821
+
+KUL random cv
+s1 48 channels
+Mean Test Accuracy: 0.6961 ± 0.0095
+Mean Test Accuracy reduced: 0.6443 ± 0.0188
+
+s1 32 channels
+Mean Test Accuracy: 0.6968 ± 0.0124
+Mean Test Accuracy reduced: 0.6495 ± 0.0235
