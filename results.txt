@@ -18,10 +18,21 @@ Mean Test Accuracy: 0.7066 ± 0.1358
 Mean Test Accuracy reduced channels: 0.4515 ± 0.1821
 
 KUL random cv
-s1 48 channels
-Mean Test Accuracy: 0.6961 ± 0.0095
-Mean Test Accuracy reduced: 0.6443 ± 0.0188
 
 s1 32 channels
-Mean Test Accuracy: 0.6968 ± 0.0124
-Mean Test Accuracy reduced: 0.6495 ± 0.0235
+Mean Test Accuracy: 0.6998 ± 0.0120
+Mean Test Accuracy reduced: 0.6465 ± 0.0118
+
+
+
+
+
+
+
+
+
+DTU random cv
+s1 32 channels
+Mean Test Accuracy: 0.7230 ± 0.0129
+Mean Test Accuracy reduced: 0.6592 ± 0.0171
+

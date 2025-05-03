@@ -9,7 +9,6 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.model_selection import train_test_split
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import griddata
@@ -652,7 +651,9 @@ def reduce_channels(original_values, shap_values, channel_names, reduction=48):
     
     # Select the top channels based on SHAP values top 50
     top_channels = [channel for channel, _ in sorted_channel_shap[:reduction]]
-    top_channel_indices = [i for i, name in enumerate(channel_names) if name in top_channels]
+    top_channel_indices = [channel_names.index(name) for name in top_channels]
+    print(f"Top {reduction} channels: {[channel_names[i] for i in top_channel_indices]}")
+
 
     original_values = np.array(original_values)  # Convert to NumPy array
     original_values = original_values[:, :, top_channel_indices]  # Select only the top channels
