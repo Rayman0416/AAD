@@ -23,10 +23,25 @@ s1 32 channels
 Mean Test Accuracy: 0.6998 ± 0.0120
 Mean Test Accuracy reduced: 0.6465 ± 0.0118
 
+s1 16 channels
+Mean Test Accuracy: 0.6939 ± 0.0114
+Mean Test Accuracy reduced: 0.6171 ± 0.0151
 
+s2 16 channels
+Mean Test Accuracy: 0.6240 ± 0.0152
+Mean Test Accuracy reduced: 0.5710 ± 0.0141
 
+s3 16 channels
+Mean Test Accuracy: 0.6758 ± 0.0133
+Mean Test Accuracy reduced: 0.6427 ± 0.0206
 
+s4 16 channels
+Mean Test Accuracy: 0.6466 ± 0.0127
+Mean Test Accuracy reduced: 0.5713 ± 0.0171
 
+s5 16 channels
+Mean Test Accuracy: 0.6491 ± 0.0124
+Mean Test Accuracy reduced: 0.6088 ± 0.0087
 
 
 
@@ -35,4 +50,24 @@ DTU random cv
 s1 32 channels
 Mean Test Accuracy: 0.7230 ± 0.0129
 Mean Test Accuracy reduced: 0.6592 ± 0.0171
+
+s1 16 channels
+Mean Test Accuracy: 0.7237 ± 0.0108
+Mean Test Accuracy reduced: 0.6186 ± 0.0183
+
+s2 16 channels
+Mean Test Accuracy: 0.6514 ± 0.0111
+Mean Test Accuracy reduced: 0.5390 ± 0.0132
+
+s3 16 channels
+Mean Test Accuracy: 0.6722 ± 0.0524
+Mean Test Accuracy reduced: 0.6611 ± 0.0460
+
+s4 16 channels
+Mean Test Accuracy: 0.6354 ± 0.0205
+Mean Test Accuracy reduced: 0.6284 ± 0.0128
+
+s5 16 channels
+Mean Test Accuracy: 0.6072 ± 0.0110
+Mean Test Accuracy reduced: 0.5415 ± 0.0159
 

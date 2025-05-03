@@ -788,7 +788,7 @@ if __name__ == "__main__":
     print(f"mean SHAP shape: {mean_shap_per_pixel.shape}")
 
     
-    X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=32)
+    X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=16)
     print(f"X shape after reduction: {X.shape}")
 
     shap_results = []
