@@ -51,6 +51,21 @@ s7 16 channels
 Mean Test Accuracy: 0.6772 ± 0.0149
 Mean Test Accuracy reduced: 0.6041 ± 0.0108
 
+s8 16 channels
+Mean Test Accuracy: 0.6632 ± 0.0148
+Mean Test Accuracy reduced: 0.6350 ± 0.0136
+
+s9 16 channels
+Mean Test Accuracy: 0.6670 ± 0.0151
+Mean Test Accuracy reduced: 0.6467 ± 0.0179
+
+s10 16 channels
+Mean Test Accuracy: 0.7517 ± 0.0059
+Mean Test Accuracy reduced: 0.7008 ± 0.0163
+
+
+
+
 
 
 DTU random cv
