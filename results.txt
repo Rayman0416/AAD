@@ -43,6 +43,13 @@ s5 16 channels
 Mean Test Accuracy: 0.6491 ± 0.0124
 Mean Test Accuracy reduced: 0.6088 ± 0.0087
 
+s6 16 channels
+Mean Test Accuracy: 0.7225 ± 0.0103
+Mean Test Accuracy reduced: 0.6937 ± 0.0088
+
+s7 16 channels
+Mean Test Accuracy: 0.6772 ± 0.0149
+Mean Test Accuracy reduced: 0.6041 ± 0.0108
 
 
 
@@ -70,4 +77,8 @@ Mean Test Accuracy reduced: 0.6284 ± 0.0128
 s5 16 channels
 Mean Test Accuracy: 0.6072 ± 0.0110
 Mean Test Accuracy reduced: 0.5415 ± 0.0159
+
+s6 16 channels
+Mean Test Accuracy: 0.6724 ± 0.0102
+Mean Test Accuracy reduced: 0.5874 ± 0.0111
 
