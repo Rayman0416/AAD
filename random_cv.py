@@ -327,6 +327,16 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32, reduced_c
     # Replace NaNs with zero or another fill value
     images = np.nan_to_num(images, nan=0)
 
+    # save_topo_map_image(
+    #     topo_map=images[0],  # Save only the first window for demonstration
+    #     output_filepath=f"plots/{subject['name']}_topo_map.png",
+    #     title=f"EEG image for {subject['name']}",
+    #     cmap='viridis',
+    #     show_axis=True,
+    #     colorbar=True,
+    #     dpi=150
+    # )
+
     return images
 
 # Bandpass filter the data and segment the data into windows
@@ -372,7 +382,7 @@ def save_topo_map_image(topo_map: np.ndarray,
     if not isinstance(topo_map, np.ndarray) or topo_map.ndim != 2:
         raise ValueError("topo_map must be a 2D NumPy array.")
 
-    fig, ax = plt.subplots(figsize=(6, 6)) # Adjust figsize as needed
+    fig, ax = plt.subplots(figsize=(8, 8)) # Adjust figsize as needed
 
     # Display the 2D map array as an image
     # origin='upper' places the [0,0] index at the top-left corner
@@ -380,7 +390,8 @@ def save_topo_map_image(topo_map: np.ndarray,
 
     # Add a colorbar if requested
     if colorbar:
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04) # Adjust fraction/pad as needed
+        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04) # Adjust fraction/pad as needed
+        cbar.set_label('Alpha Power', rotation=270, labelpad=20)  # Label for colorbar
 
     # Set the title if provided
     if title:
