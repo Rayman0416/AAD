@@ -56,12 +56,61 @@ Mean Test Accuracy reduced: 0.7008 ± 0.0163
 
 
 s1 16 channels 5 sec window
-Mean Test Accuracy: 0.7328 ± 0.0417
-Mean Test Accuracy reduced: 0.6306 ± 0.0425
+Mean Test Accuracy: 0.7400 ± 0.0357
+Mean Test Accuracy reduced: 0.6583 ± 0.0415
 
-s1 16 channels 5 sec window 50 epochs
-Mean Test Accuracy: 0.7555 ± 0.0246
-Mean Test Accuracy reduced: 0.6249 ± 0.0360
+s2 16 channels 5 sec window 
+Mean Test Accuracy: 0.6487 ± 0.0444
+Mean Test Accuracy reduced: 0.6243 ± 0.0570
+
+s3 16 channels 5 sec window
+Mean Test Accuracy: 0.7800 ± 0.0391
+Mean Test Accuracy reduced: 0.6991 ± 0.0486
+
+s4 16 channels 5 sec window
+Mean Test Accuracy: 0.7148 ± 0.0398
+Mean Test Accuracy reduced: 0.5843 ± 0.0362
+
+s5 16 channels 5 sec window
+Mean Test Accuracy: 0.7461 ± 0.0327
+Mean Test Accuracy reduced: 0.6696 ± 0.0371
+
+s6 16 channels 5 sec window
+Mean Test Accuracy: 0.8148 ± 0.0387
+Mean Test Accuracy reduced: 0.7539 ± 0.0551
+
+s7 16 channels 5 sec window
+Mean Test Accuracy: 0.7835 ± 0.0359
+Mean Test Accuracy reduced: 0.6435 ± 0.0269
+
+s8 16 channels 5 sec window
+Mean Test Accuracy: 0.7643 ± 0.0276
+Mean Test Accuracy reduced: 0.7087 ± 0.0425
+
+s9 16 channels 5 sec window
+Mean Test Accuracy: 0.7139 ± 0.0480
+Mean Test Accuracy reduced: 0.6765 ± 0.0466
+
+s10 16 channels 5 sec window
+Mean Test Accuracy: 0.8870 ± 0.0243
+Mean Test Accuracy reduced: 0.8565 ± 0.0321
+
+s11 16 channels 5 sec window
+Mean Test Accuracy: 0.6817 ± 0.0580
+Mean Test Accuracy reduced: 0.6391 ± 0.0536
+
+s12 16 channels 5 sec window
+Mean Test Accuracy: 0.8209 ± 0.0299
+Mean Test Accuracy reduced: 0.8052 ± 0.0307
+
+s13 16 channels 5 sec window
+Mean Test Accuracy: 0.6870 ± 0.0435
+Mean Test Accuracy reduced: 0.5870 ± 0.0221
+
+s14 16 channels 5 sec window
+Mean Test Accuracy: 0.7887 ± 0.0478
+Mean Test Accuracy reduced: 0.6087 ± 0.0428
+
 
 shap 200
 Mean Test Accuracy: 0.7624 ± 0.0195

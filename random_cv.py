@@ -10,6 +10,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from preprocess import *
 from model import *
     
@@ -316,26 +317,29 @@ if __name__ == "__main__":
 
         # Split data into training and testing sets
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=42 + fold, stratify=y
+            X, y, test_size=0.1, random_state=1 + fold, stratify=y
         )
 
         X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.1, random_state=42 + fold, stratify=y_train
+            X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
         )
 
         # Preprocess the data
         X_train, y_train = preprocess(X_train, y_train, channel_names)
         X_val, y_val = preprocess(X_val, y_val, channel_names)
         X_test, y_test = preprocess(X_test, y_test, channel_names)
+        print(f"X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+        print(f"X_val shape: {X_val.shape}, y_val shape: {y_val.shape}")
+        print(f"X_test shape: {X_test.shape}, y_test shape: {y_test.shape}")
 
         # Create DataLoader
         train_dataset = EEGDataset(X_train, y_train)
         val_dataset = EEGDataset(X_val, y_val)
         test_dataset = EEGDataset(X_test, y_test)
 
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, drop_last=True)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, drop_last=True)
-        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, drop_last=True)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         # Initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -344,11 +348,12 @@ if __name__ == "__main__":
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
         # Training loop
         best_val_loss = float('inf')
         best_model = None
-        patience = 20
+        patience = 10
         counter = 0
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
@@ -365,6 +370,8 @@ if __name__ == "__main__":
             if counter >= patience:
                 print("Early stopping...")
                 break
+
+            scheduler.step(val_loss)
         
         model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
@@ -408,11 +415,11 @@ if __name__ == "__main__":
 
         # Split data into training and testing sets
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=42 + fold, stratify=y
+            X, y, test_size=0.1, random_state=1 + fold, stratify=y
         )
 
         X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.1, random_state=42 + fold, stratify=y_train
+            X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
         )
 
         # Preprocess the data
@@ -436,8 +443,13 @@ if __name__ == "__main__":
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
         # Training loop
+        best_val_loss = float('inf')
+        best_model = None
+        patience = 10
+        counter = 0
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
@@ -446,6 +458,15 @@ if __name__ == "__main__":
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_model = model.state_dict()
+                counter = 0
+            else:
+                counter += 1
+
+            if counter >= patience:
+                print("Early stopping...")
+                break
+
+            scheduler.step(val_loss)
         
         model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
