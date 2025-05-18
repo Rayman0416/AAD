@@ -348,12 +348,12 @@ if __name__ == "__main__":
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+        # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
         # Training loop
         best_val_loss = float('inf')
         best_model = None
-        patience = 10
+        patience = 20
         counter = 0
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
@@ -371,7 +371,7 @@ if __name__ == "__main__":
                 print("Early stopping...")
                 break
 
-            scheduler.step(val_loss)
+            # scheduler.step(val_loss)
         
         model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
@@ -443,12 +443,12 @@ if __name__ == "__main__":
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+        # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
         # Training loop
         best_val_loss = float('inf')
         best_model = None
-        patience = 10
+        patience = 20
         counter = 0
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
@@ -466,7 +466,7 @@ if __name__ == "__main__":
                 print("Early stopping...")
                 break
 
-            scheduler.step(val_loss)
+            # scheduler.step(val_loss)
         
         model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
