@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
         # Initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = EEGNet2(in_channels=1).to(device)
+        model = Rayanet(in_channels=1).to(device)
 
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
         # Initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = EEGNet2(in_channels=1).to(device)
+        model = Rayanet(in_channels=1).to(device)
 
         # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
