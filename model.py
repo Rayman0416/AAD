@@ -13,19 +13,24 @@ import time
 import random
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+tf.compat.v1.disable_v2_behavior()
 from dotmap import DotMap
 from utils import cart2sph, pol2cart, makePath
-from keras.layers import Input, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D
-from keras.layers import AveragePooling2D, MaxPooling2D, Dropout, GlobalMaxPooling2D, GlobalAveragePooling2D
-from keras.models import Sequential
-import keras.backend as K
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Input, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D
+from tensorflow.keras.layers import AveragePooling2D, MaxPooling2D, Dropout, GlobalMaxPooling2D, GlobalAveragePooling2D
+from tensorflow.keras.models import Sequential
+from tensorflow.keras import regularizers
+import tensorflow.keras.backend as K
 from sklearn.preprocessing import scale
 from scipy.interpolate import griddata
-from keras.utils import np_utils
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.optimizers import RMSprop
 from scipy.io import loadmat
-import keras
 import os
 from importlib import reload
+import shap
 np.set_printoptions(suppress=True)
 
 
@@ -88,6 +93,43 @@ def gen_images(data, args):
 
     images[~np.isnan(images)] = scale(images[~np.isnan(images)])
     images = np.nan_to_num(images)
+    return images
+
+
+def extract_shap(image, args):
+    locs = loadmat('locs_orig.mat')
+    locs_3d = locs['data']
+    locs_2d = np.array([azim_proj(e) for e in locs_3d])
+
+    x_min, x_max = locs_2d[:,0].min(), locs_2d[:,0].max()
+    y_min, y_max = locs_2d[:,1].min(), locs_2d[:,1].max()
+
+    x_idx = ((locs_2d[:,0] - x_min) / (x_max - x_min) * (args.image_size - 1)).round().astype(int)
+    y_idx = ((locs_2d[:,1] - y_min) / (y_max - y_min) * (args.image_size - 1)).round().astype(int)
+
+    channel_shap = image[x_idx, y_idx]
+
+    return channel_shap
+
+def recreate_images(data, args, top_indices):
+    locs = loadmat('locs_orig.mat')
+    locs_3d = locs['data'][top_indices, :]
+    locs_2d = np.array([azim_proj(e) for e in locs_3d])
+    data = data[:, top_indices]
+
+    
+    grid_x, grid_y = np.mgrid[
+                     min(np.array(locs_2d)[:, 0]):max(np.array(locs_2d)[:, 0]):args.image_size * 1j,
+                     min(np.array(locs_2d)[:, 1]):max(np.array(locs_2d)[:, 1]):args.image_size * 1j]
+
+    images = []
+    for i in range(data.shape[0]):
+        images.append(griddata(locs_2d, data[i, :], (grid_x, grid_y), method='cubic', fill_value=np.nan))
+    images = np.stack(images, axis=0)
+
+    images[~np.isnan(images)] = scale(images[~np.isnan(images)])
+    images = np.nan_to_num(images)
+
     return images
 
 
@@ -166,14 +208,15 @@ def to_alpha(data, window, args):
     return alpha_data
 
 
-def main(name="S1", data_document_path="D:\\eegdata\\KUL_single_single3"):
+def main(name="S1", data_document_path="../KUL_single_single3"):
     args = DotMap()
+    args.reduce = 32
     args.name = name
     args.subject_number = int(args.name[1:])
     args.data_document_path = data_document_path
     args.ConType = ["No"]
     args.fs = 128
-    args.window_length = math.ceil(args.fs * 1)
+    args.window_length = math.ceil(args.fs * 10)
     args.overlap = 0.8
     args.batch_size = 32
     args.max_epoch = 200
@@ -209,21 +252,26 @@ def main(name="S1", data_document_path="D:\\eegdata\\KUL_single_single3"):
     # fft
     train_data = to_alpha(data, train_window, args)
     test_data = to_alpha(data, test_window, args)
+    train_alpha_data = train_data
+    test_alpha_data = test_data
     del data
 
     # to images
     train_data = gen_images(train_data, args)
     test_data = gen_images(test_data, args)
 
+    # add 1 channel(grayscale) dimension for conv2d keras: (batch_size, height, width, channels)
     train_data = np.expand_dims(train_data, axis=-1)
     test_data = np.expand_dims(test_data, axis=-1)
-    train_label = np_utils.to_categorical(train_label - 1, 2)
-    test_label = np_utils.to_categorical(test_label - 1, 2)
+
+    # encode labels like [1, 0] and [0, 1] for softmax
+    train_label = to_categorical(train_label - 1, 2)
+    test_label = to_categorical(test_label - 1, 2)
 
     # train
     model = Sequential()
     model.add(Conv2D(32, (3, 3), padding='same', input_shape=train_data.shape[1:],
-                     kernel_regularizer=keras.regularizers.l2(0.01), data_format="channels_last"))
+                     kernel_regularizer=regularizers.l2(0.01), data_format="channels_last"))
     model.add(BatchNormalization())
     model.add(Activation('relu'))
     model.add(AveragePooling2D(pool_size=(2, 2), data_format="channels_last"))
@@ -247,15 +295,52 @@ def main(name="S1", data_document_path="D:\\eegdata\\KUL_single_single3"):
     # Output the parameter status of each layer of the model
     model.summary()
 
-    opt = keras.optimizers.RMSprop(lr=0.0003, decay=3e-4)
+    opt = RMSprop(lr=0.0003, decay=3e-4)
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
+    early_stopping = EarlyStopping(monitor='val_loss', patience=20, verbose=1, restore_best_weights=True)
     # plot_model(model, to_file='model.png', show_shapes=True)
 
-    history = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
+    history = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2, callbacks=[early_stopping])
     loss, accuracy = model.evaluate(test_data, test_label)
     print(loss, accuracy)
+
+    # Shapley value analysis
+    background = train_data[np.random.choice(train_data.shape[0], 200, replace=False)]
+    explainer = shap.DeepExplainer(model, background)
+    to_explain = test_data[:100]
+    shap_values = explainer.shap_values(to_explain)
+    true_classes = np.argmax(test_label[:100], axis=1)
+    
+    correct_class_shap = []
+    for i, cls in enumerate(true_classes):
+        correct_class_shap.append(shap_values[cls][i])
+    
+    mean_shap = np.mean(correct_class_shap, axis=0)
+    mean_shap = np.squeeze(mean_shap, axis=-1)
+    mean_shap = extract_shap(mean_shap, args)
+
+    sorted_indices = np.argsort(mean_shap)[::-1]
+    top_indices = sorted_indices[:args.reduce]
+
+    train_data = recreate_images(train_alpha_data, args, top_indices)
+    test_data = recreate_images(test_alpha_data, args, top_indices)
+    train_data = np.expand_dims(train_data, axis=-1)
+    test_data = np.expand_dims(test_data, axis=-1)
+    print("Recreated images shape:", train_data.shape)
+
+    # retrain model with reduced features
+    history_reduced = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2, callbacks=[early_stopping])
+
+    loss_reduced, accuracy_reduced = model.evaluate(test_data, test_label)
+
+    print(f"Loss: {loss}, Accuracy: {accuracy}")
+    print(f"Reduced Features - Loss: {loss_reduced}, Accuracy: {accuracy_reduced}")
     logger.info(loss)
     logger.info(accuracy)
+    logger.info(loss_reduced)
+    logger.info(accuracy_reduced)
+
+    return loss, accuracy, loss_reduced, accuracy_reduced
 
 
 if __name__ == "__main__":

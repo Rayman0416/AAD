@@ -10,15 +10,16 @@
 
 from multiprocessing import Process
 from model import main
+from shap_wrapper import multi_run
 import utils as util
 
 if __name__ == "__main__":
-    multiple = 1
+    multiple = 4
     process = []
-    path = "/document/data/eeg/KUL_single_single3"
+    path = "../KUL_single_single3"
     names = ['S' + str(i+1) for i in range(0, 16)]
     for name in names:
-        p = Process(target=main, args=(name, path,))  # 必须加,号
+        p = Process(target=multi_run, args=(name, path, 10, "./result", 32))
         p.start()
         process.append(p)
         util.monitor(process, multiple, 60)
