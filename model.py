@@ -216,7 +216,7 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
     args.data_document_path = data_document_path
     args.ConType = ["No"]
     args.fs = 128
-    args.window_length = math.ceil(args.fs * 5)
+    args.window_length = math.ceil(args.fs * 1)
     args.overlap = 0.8
     args.batch_size = 32
     args.max_epoch = 100
