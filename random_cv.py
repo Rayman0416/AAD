@@ -4,6 +4,7 @@ import math
 import scipy.io as sio
 import numpy as np
 import shap
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -199,21 +200,6 @@ def group_KUL_trials(subject):
     
     return X, y, groups
 
-def create_stacked_input(windows, labels, stack_size=3):
-    
-    num_samples = windows.shape[0] - stack_size + 1
-    stacked = []
-    for i in range(num_samples):
-        stack = np.stack(windows[i:i + stack_size], axis=0)  # Shape: (stack_size, resolution, resolution)
-        stacked.append(stack)
-    print(f"stacked shape: {np.array(stacked).shape}")
-
-    labels = labels[stack_size - 1:]  # Adjust labels to match the stacked windows
-    assert len(stacked) == len(labels), "Mismatch in stacked data and labels length"
-
-
-    return np.array(stacked), labels  # Shape: (num_samples, stack_size, resolution, resolution)
-
 def preprocess(data, labels, channel_names, reduced_channels=None):
     data = compute_alpha_power(data)
     data = normalize_data(data)
@@ -395,8 +381,8 @@ if __name__ == "__main__":
         explainer = shap.DeepExplainer(model, background)
 
         # Compute SHAP on the rest of the training set (or all of it)
-        X_train_tensor = torch.from_numpy(X_train).float().to(device)
-        shap_values_fold = explainer.shap_values(X_train_tensor)  # shape: (batch, time, channels)
+        X_test_tensor = torch.from_numpy(X_test[:100]).float().to(device)
+        shap_values_fold = explainer.shap_values(X_test_tensor)  # shape: (batch, time, channels)
         shap_values_fold = shap_values_fold.squeeze()  # remove singleton dims if needed
 
         all_shap_values.append(shap_values_fold)
@@ -412,88 +398,118 @@ if __name__ == "__main__":
     print(f"mean SHAP shape: {mean_shap_per_pixel.shape}")
 
     
-    X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=32)
-    print(f"X shape after reduction: {X.shape}")
-
-    shap_results = []
-    for fold in range(folds):
-        best_val_loss = float('inf')
-        best_model = None
-        print(f"Fold: {fold + 1}")
-
-        # Split data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=1 + fold, stratify=y
-        )
-
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
-        )
-
-        # Preprocess the data
-        X_train, y_train = preprocess(X_train, y_train, channel_names, reduced_channels=reduced_channels)
-        X_val, y_val = preprocess(X_val, y_val, channel_names, reduced_channels=reduced_channels)
-        X_test, y_test = preprocess(X_test, y_test, channel_names, reduced_channels=reduced_channels)
-
-        # Create DataLoader
-        train_dataset = EEGDataset(X_train, y_train)
-        val_dataset = EEGDataset(X_val, y_val)
-        test_dataset = EEGDataset(X_test, y_test)
-
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=32)
-        test_loader = DataLoader(test_dataset, batch_size=32)
-
-        # Initialize model
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = Rayanet(in_channels=1).to(device)
-
-        # Loss and optimizer
-        criterion = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
-        # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
-
-        # Training loop
-        best_val_loss = float('inf')
-        best_model = None
-        patience = 20
-        counter = 0
-        for epoch in range(epochs):
-            train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
-            val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-            print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_model = model.state_dict()
-                counter = 0
-            else:
-                counter += 1
-
-            if counter >= patience:
-                print("Early stopping...")
-                break
-
-            # scheduler.step(val_loss)
-        
-        model.load_state_dict(best_model)
-        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-        shap_results.append(test_acc)
-        print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
-
-    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
-    print(f"\nMean Test Accuracy reduced: {np.mean(shap_results):.4f} ± {np.std(shap_results):.4f}")
-    print(f"\ns{subject_nr},{np.mean(results):.4f},{np.std(results):.4f},{np.mean(shap_results):.4f},{np.std(shap_results):.4f}")
-    print(dataset, subject_nr)
-
-    plt.imshow(mean_shap_per_pixel, cmap='hot')
-    cbar = plt.colorbar()
-    cbar.set_label("SHAP value")
     
-    plt.xlabel("Width")
-    plt.ylabel("Height")
-    plt.title("The mean SHAP Value for each Pixel")
-    plt.savefig("shap_plot.png")
-    plt.close()
+    # Run reduced-channel 32, 16 on the model
+    reduced_results = {}
+    reduction_list = [32, 16]
+    for reduction in reduction_list:
+        print(f"\nRunning reduced-channel experiment: top-{reduction} channels")
+
+        X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=reduction)
+        print(f"X shape after reduction ({reduction}): {X.shape}")
+
+        shap_results = []
+
+        for fold in range(folds):
+            best_val_loss = float('inf')
+            best_model = None
+            print(f"Fold: {fold + 1}")
+
+            # Split data into training and testing sets
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.1, random_state=1 + fold, stratify=y
+            )
+
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
+            )
+
+            # Preprocess the data
+            X_train, y_train = preprocess(X_train, y_train, channel_names, reduced_channels=reduced_channels)
+            X_val, y_val = preprocess(X_val, y_val, channel_names, reduced_channels=reduced_channels)
+            X_test, y_test = preprocess(X_test, y_test, channel_names, reduced_channels=reduced_channels)
+
+            # Create DataLoader
+            train_dataset = EEGDataset(X_train, y_train)
+            val_dataset = EEGDataset(X_val, y_val)
+            test_dataset = EEGDataset(X_test, y_test)
+
+            train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=32)
+            test_loader = DataLoader(test_dataset, batch_size=32)
+
+            # Initialize model
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = Rayanet(in_channels=1).to(device)
+
+            # Loss and optimizer
+            criterion = nn.BCEWithLogitsLoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
+            # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+
+            # Training loop
+            best_val_loss = float('inf')
+            best_model = None
+            patience = 20
+            counter = 0
+            for epoch in range(epochs):
+                train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
+                val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+                print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_model = model.state_dict()
+                    counter = 0
+                else:
+                    counter += 1
+
+                if counter >= patience:
+                    print("Early stopping...")
+                    break
+
+                # scheduler.step(val_loss)
+            
+            model.load_state_dict(best_model)
+            test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+            shap_results.append(test_acc)
+            print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+
+        reduced_results[reduction] = shap_results
+    
+    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    print(f"Mean Test Accuracy reduced 32: {np.mean(reduced_results[32]):.4f} ± {np.std(reduced_results[32]):.4f}")
+    print(f"Mean Test Accuracy reduced 16: {np.mean(reduced_results[16]):.4f} ± {np.std(reduced_results[16]):.4f}")
+    
+    results_dict = {
+        "subject": [subject_nr],
+        "mean_accuracy": [np.mean(results)],
+        "std_accuracy": [np.std(results)],
+    }
+
+    # Add dynamic reductions
+    for reduction in reduction_list:
+        results_dict[f"mean_accuracy_{reduction}"] = [np.mean(reduced_results[reduction])]
+        results_dict[f"std_accuracy_{reduction}"] = [np.std(reduced_results[reduction])]
+
+    # Create a DataFrame
+    df = pd.DataFrame(results_dict)
+
+    # Write or append to CSV
+    output_file = "accuracy_results.csv"
+    try:
+        existing_df = pd.read_csv(output_file)
+        updated_df = pd.concat([existing_df, df], ignore_index=True)
+        updated_df.to_csv(output_file, index=False, float_format="%.4f")
+    except FileNotFoundError:
+        df.to_csv(output_file, index=False, float_format="%.4f")
+
+    print(f"\nResults saved to {output_file}")
+
+    # plt.imshow(mean_shap_per_pixel, cmap='hot')
+    # plt.colorbar()
+    # plt.title("Mean SHAP Values per Pixel")
+    # plt.savefig("shap_plot.png")
+    # plt.close()
 
 
