@@ -320,27 +320,35 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
     mean_shap = extract_shap(mean_shap, args)
 
     sorted_indices = np.argsort(mean_shap)[::-1]
-    top_indices = sorted_indices[:args.reduce]
+    top_32indices = sorted_indices[:32]
+    top_16indices = sorted_indices[:16]
 
-    train_data = recreate_images(train_alpha_data, args, top_indices)
-    test_data = recreate_images(test_alpha_data, args, top_indices)
-    train_data = np.expand_dims(train_data, axis=-1)
-    test_data = np.expand_dims(test_data, axis=-1)
-    print("Recreated images shape:", train_data.shape)
+    train_data32 = recreate_images(train_alpha_data, args, top_32indices)
+    test_data32 = recreate_images(test_alpha_data, args, top_32indices)
+    train_data16 = recreate_images(train_alpha_data, args, top_16indices)
+    test_data16 = recreate_images(test_alpha_data, args, top_16indices)
+
+    train_data32 = np.expand_dims(train_data32, axis=-1)
+    test_data32 = np.expand_dims(test_data32, axis=-1)
+    train_data16 = np.expand_dims(train_data16, axis=-1)
+    test_data16 = np.expand_dims(test_data16, axis=-1)
+    print("Recreated images shape:", train_data32.shape)
 
     # retrain model with reduced features
-    history_reduced = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
 
-    loss_reduced, accuracy_reduced = model.evaluate(test_data, test_label)
+    # 32 channels
+    history_reduced = model.fit(train_data32, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
+    loss_reduced_32, accuracy_reduced_32 = model.evaluate(test_data32, test_label)
+
+    # 16 channels
+    history_reduced_16 = model.fit(train_data16, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
+    loss_reduced_16, accuracy_reduced_16 = model.evaluate(test_data16, test_label)
 
     print(f"Loss: {loss}, Accuracy: {accuracy}")
-    print(f"Reduced Features - Loss: {loss_reduced}, Accuracy: {accuracy_reduced}")
-    logger.info(loss)
-    logger.info(accuracy)
-    logger.info(loss_reduced)
-    logger.info(accuracy_reduced)
+    print(f"Reduced Features 32 - Loss: {loss_reduced_32}, Accuracy: {accuracy_reduced_32}")
+    print(f"Reduced Features 16 - Loss: {loss_reduced_16}, Accuracy: {accuracy_reduced_16}")
 
-    return loss, accuracy, loss_reduced, accuracy_reduced
+    return loss, accuracy, loss_reduced_32, accuracy_reduced_32, loss_reduced_16, accuracy_reduced_16
 
 
 if __name__ == "__main__":
