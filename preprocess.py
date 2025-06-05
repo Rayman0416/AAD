@@ -13,13 +13,13 @@ def window_split(subject):
     print("window split begin")
     for trial in subject['trials']:
         eeg_data = trial['eeg']  # EEG data (NumPy array)
-        trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=13.0, fs=128)
+        trial['eeg'] = bandpass_filter(eeg_data, lowcut=1.0, highcut=45.0, fs=128)
         trial['eeg'] = segment_eeg_data(trial)
     
     print("window split complete")
     return subject
 
-def segment_eeg_data(trial, window_size=128, overlap=0.5):
+def segment_eeg_data(trial, window_size=1280, overlap=0.5):
     """
     Segments EEG data with overlap per trial.
     
@@ -94,7 +94,7 @@ def compute_alpha_power(eeg_data, sfreq=128):
     window_length = eeg_data.shape[1]
     
     alpha_low = 8
-    alpha_high = 13
+    alpha_high = 14
     frequency_resolution = sfreq / window_length
     point_low = math.ceil(alpha_low / frequency_resolution)
     point_high = math.ceil(alpha_high / frequency_resolution) + 1
@@ -181,7 +181,16 @@ def create_topo_map(channel_values, channel_names, grid_resolution=32, reduced_c
     # Replace NaNs with zero or another fill value
     images = np.nan_to_num(images, nan=0)
 
-    # Apply circular mask to the images
-    # images = apply_circular_mask(images)
+    # # create a topographical map plot
+    # image = images[0]
+    # plt.imshow(image, cmap='jet', origin='lower')
+    # cbar = plt.colorbar()
+    # cbar.set_label("Alpha Power")
+    
+    # plt.xlabel("Width")
+    # plt.ylabel("Height")
+    # plt.title("Topographical Map of Alpha Power")
+    # plt.savefig("Topo_map.png")
+    # plt.close()
 
     return images

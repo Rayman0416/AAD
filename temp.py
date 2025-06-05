@@ -269,104 +269,77 @@ def reduce_channels(original_values, shap_values, channel_names, reduction=48):
 
 
 
-if __name__ == "__main__":
-    data_KUL = "./KUL"  # KUL data dir
-    data_DTU = "./DTU"  # DTU data dir
-
-    # choose dataset and subject number to test
-    dataset = input("Enter dataset (KUL or DTU): ").strip().upper()
-    if dataset == "DTU":
-        subject_nr = input("Enter subject number (1-18): ")
-    elif dataset == "KUL":
-        subject_nr = input("Enter subject number (1-16): ")
+def run_subject_analysis(dataset: str, subject_nr: int, data_KUL="./KUL", data_DTU="./DTU", save_plot=False):
+    dataset = dataset.strip().upper()
 
     # Load the dataset
     if dataset == "DTU":
         print("Loading DTU AAD data...")
         try:
-            subjects_data, channel_names = load_DTU(data_DTU) 
+            subjects_data, channel_names = load_DTU(data_DTU)
         except Exception as e:
-            raise RuntimeError(f"Failed to load data: {e}")
+            raise RuntimeError(f"Failed to load DTU data: {e}")
     elif dataset == "KUL":
         print("Loading KUL AAD data...")
         try:
             subjects_data, channel_names = load_kul(data_KUL)
         except Exception as e:
-            raise RuntimeError(f"Failed to load data: {e}")
+            raise RuntimeError(f"Failed to load KUL data: {e}")
+    else:
+        raise ValueError("Invalid dataset. Must be 'KUL' or 'DTU'.")
 
     print(f"Loaded {len(subjects_data)} subjects from {dataset} dataset.")
-
-    subject = subjects_data[int(subject_nr) - 1]  # Select subject by number
+    subject = subjects_data[int(subject_nr) - 1]
     print(f"Processing subject {subject['name']}...")
-    
+
     subject = window_split(subject)
     print("subject shape: ", subject['trials'][0]['eeg'].shape)
 
-    # Prepare data for cross-validation
-    X, y, groups = [], [], []
-
+    # Prepare data
     if dataset == "DTU":
         X, y, groups = group_DTU_trials(subject)
     elif dataset == "KUL":
         X, y, groups = group_KUL_trials(subject)
 
-    X = np.array(X)  # Convert to NumPy array
+    X = np.array(X)
     y = np.array(y)
     groups = np.array(groups)
     print(f"X shape: {X.shape}, y shape: {y.shape}, groups shape: {groups.shape}")
-    original_values = X.copy()  # Keep original values for SHAP calculation
+    original_values = X.copy()
 
     folds = 10
     epochs = 100
     results = []
     all_shap_values = []
+
     for fold in range(folds):
         print(f"Fold: {fold + 1}")
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=1 + fold, stratify=y)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train)
 
-        # Split data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=1 + fold, stratify=y
-        )
-
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
-        )
-
-        # Preprocess the data
         X_train, y_train = preprocess(X_train, y_train, channel_names)
         X_val, y_val = preprocess(X_val, y_val, channel_names)
         X_test, y_test = preprocess(X_test, y_test, channel_names)
-        print(f"X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
-        print(f"X_val shape: {X_val.shape}, y_val shape: {y_val.shape}")
-        print(f"X_test shape: {X_test.shape}, y_test shape: {y_test.shape}")
 
-        # Create DataLoader
-        train_dataset = EEGDataset(X_train, y_train)
-        val_dataset = EEGDataset(X_val, y_val)
-        test_dataset = EEGDataset(X_test, y_test)
+        train_loader = DataLoader(EEGDataset(X_train, y_train), batch_size=32, shuffle=True)
+        val_loader = DataLoader(EEGDataset(X_val, y_val), batch_size=32)
+        test_loader = DataLoader(EEGDataset(X_test, y_test), batch_size=32)
 
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
-        # Initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = Rayanet(in_channels=1).to(device)
 
-        # Loss and optimizer
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
-        # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
-        # Training loop
         best_val_loss = float('inf')
         best_model = None
-        patience = 20
         counter = 0
+        patience = 20
+
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-            print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+            print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -374,126 +347,89 @@ if __name__ == "__main__":
                 counter = 0
             else:
                 counter += 1
-
             if counter >= patience:
                 print("Early stopping...")
                 break
 
-            # scheduler.step(val_loss)
-        
         model.load_state_dict(best_model)
         test_loss, test_acc = evaluate(model, test_loader, criterion, device)
         results.append(test_acc)
-        print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+        print(f"Test Accuracy: {test_acc:.4f}")
 
-        # calculate SHAP values
-        # SHAP on TRAINING SET ONLY to avoid leakage
         model.eval()
-
-        # Use a small subset of training data as background
         background = torch.from_numpy(X_train[:200]).float().to(device)
         explainer = shap.DeepExplainer(model, background)
-
-        # Compute SHAP on the rest of the training set (or all of it)
-        X_train_tensor = torch.from_numpy(X_train).float().to(device)
-        shap_values_fold = explainer.shap_values(X_train_tensor)  # shape: (batch, time, channels)
-        shap_values_fold = shap_values_fold.squeeze()  # remove singleton dims if needed
-
+        shap_values_fold = explainer.shap_values(torch.from_numpy(X_train).float().to(device))
+        shap_values_fold = shap_values_fold.squeeze()
         all_shap_values.append(shap_values_fold)
 
-    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    mean_accuracy = np.mean(results)
+    std_accuracy = np.std(results)
 
-    # Concatenate across folds
+    print(f"\nMean Test Accuracy: {mean_accuracy:.4f} ± {std_accuracy:.4f}")
+
     final_shap_values = np.concatenate(all_shap_values, axis=0)
-    print(f"concat SHAP shape: {final_shap_values.shape}")
-
-    # Average absolute SHAP across all samples
     mean_shap_per_pixel = np.mean(np.abs(final_shap_values), axis=0)
-    print(f"mean SHAP shape: {mean_shap_per_pixel.shape}")
 
-    
-    X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=32)
-    print(f"X shape after reduction: {X.shape}")
+    X_reduced, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=32)
 
     shap_results = []
     for fold in range(folds):
-        best_val_loss = float('inf')
-        best_model = None
-        print(f"Fold: {fold + 1}")
+        print(f"SHAP Fold: {fold + 1}")
+        X_train, X_test, y_train, y_test = train_test_split(X_reduced, y, test_size=0.1, random_state=1 + fold, stratify=y)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train)
 
-        # Split data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=1 + fold, stratify=y
-        )
-
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=0.1, random_state=1 + fold, stratify=y_train
-        )
-
-        # Preprocess the data
         X_train, y_train = preprocess(X_train, y_train, channel_names, reduced_channels=reduced_channels)
         X_val, y_val = preprocess(X_val, y_val, channel_names, reduced_channels=reduced_channels)
         X_test, y_test = preprocess(X_test, y_test, channel_names, reduced_channels=reduced_channels)
 
-        # Create DataLoader
-        train_dataset = EEGDataset(X_train, y_train)
-        val_dataset = EEGDataset(X_val, y_val)
-        test_dataset = EEGDataset(X_test, y_test)
+        train_loader = DataLoader(EEGDataset(X_train, y_train), batch_size=32, shuffle=True)
+        val_loader = DataLoader(EEGDataset(X_val, y_val), batch_size=32)
+        test_loader = DataLoader(EEGDataset(X_test, y_test), batch_size=32)
 
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=32)
-        test_loader = DataLoader(test_dataset, batch_size=32)
-
-        # Initialize model
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = Rayanet(in_channels=1).to(device)
-
-        # Loss and optimizer
-        criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=3e-4)
-        # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
-        # Training loop
         best_val_loss = float('inf')
-        best_model = None
-        patience = 20
         counter = 0
+
         for epoch in range(epochs):
             train_loss, train_acc = train(model, train_loader, criterion, optimizer, device)
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-            print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_model = model.state_dict()
                 counter = 0
             else:
                 counter += 1
-
             if counter >= patience:
-                print("Early stopping...")
                 break
 
-            # scheduler.step(val_loss)
-        
         model.load_state_dict(best_model)
-        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+        _, test_acc = evaluate(model, test_loader, criterion, device)
         shap_results.append(test_acc)
-        print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
-    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
-    print(f"\nMean Test Accuracy reduced: {np.mean(shap_results):.4f} ± {np.std(shap_results):.4f}")
-    print(f"\ns{subject_nr},{np.mean(results):.4f},{np.std(results):.4f},{np.mean(shap_results):.4f},{np.std(shap_results):.4f}")
-    print(dataset, subject_nr)
+    print(f"\nReduced SHAP Mean Accuracy: {np.mean(shap_results):.4f} ± {np.std(shap_results):.4f}")
+    print(f"\ns{subject_nr},{mean_accuracy:.4f},{std_accuracy:.4f},{np.mean(shap_results):.4f},{np.std(shap_results):.4f}")
 
-    plt.imshow(mean_shap_per_pixel, cmap='hot')
-    cbar = plt.colorbar()
-    cbar.set_label("SHAP value")
+    if save_plot:
+        plt.imshow(mean_shap_per_pixel, cmap='hot')
+        plt.colorbar(label="SHAP value")
+        plt.title("The mean SHAP Value for each Pixel")
+        plt.xlabel("Width")
+        plt.ylabel("Height")
+        plt.savefig(f"shap_plot_s{subject_nr}.png")
+        plt.close()
     
-    plt.xlabel("Width")
-    plt.ylabel("Height")
-    plt.title("The mean SHAP Value for each Pixel")
-    plt.savefig("shap_plot.png")
-    plt.close()
+    return {
+        "subject": subject_nr,
+        "dataset": dataset,
+        "mean_acc": round(np.mean(results), 4),
+        "std_acc": round(np.std(results), 4),
+        "mean_shap_acc": round(np.mean(shap_results), 4),
+        "std_shap_acc": round(np.std(shap_results), 4),
+    }
+
+
 
 
