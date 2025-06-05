@@ -247,6 +247,15 @@ def reduce_channels(original_values, shap_values, channel_names, reduction=48):
 
     return original_values, top_channels
 
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     data_KUL = "./KUL"  # KUL data dir
     data_DTU = "./DTU"  # DTU data dir
@@ -294,8 +303,8 @@ if __name__ == "__main__":
     print(f"X shape: {X.shape}, y shape: {y.shape}, groups shape: {groups.shape}")
     original_values = X.copy()  # Keep original values for SHAP calculation
 
-    folds = 1
-    epochs = 2
+    folds = 10
+    epochs = 100
     results = []
     all_shap_values = []
     for fold in range(folds):
