@@ -179,7 +179,7 @@ class EEGNet(nn.Module):
         # self.batchnorm2 = nn.BatchNorm2d(32)
         
         # Convolutional Layer with Weight Normalization
-        self.conv1 = weight_norm(nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=1, padding=1))
+        self.conv1 = weight_norm(nn.Conv2d(in_channels=3, out_channels=16, kernel_size=(3, 3), stride=1, padding=1))
         self.batchnorm1 = nn.BatchNorm2d(16)
 
         self.conv2 = weight_norm(nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=1, padding=1))
