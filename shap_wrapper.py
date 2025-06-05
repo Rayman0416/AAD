@@ -6,7 +6,7 @@ import csv
 import os
 from collections import defaultdict
 
-def multi_run(name="S1", data_document_path="../KUL_single_single3", num_runs=10, log_path="./result", k=32):
+def multi_run(name="S1", data_document_path="../KUL_single_single3", num_runs=10, log_path="./result"):
     all_results = []
 
     log_file = util.makePath(log_path) + "/Multi" + name + ".log"

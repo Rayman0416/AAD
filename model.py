@@ -210,7 +210,7 @@ def to_alpha(data, window, args):
 
 def main(name="S1", data_document_path="../KUL_single_single3"):
     args = DotMap()
-    args.reduce = 32
+    args.reduce = [32, 16]  # Number of features to reduce to
     args.name = name
     args.subject_number = int(args.name[1:])
     args.data_document_path = data_document_path
@@ -328,8 +328,8 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
 
     sorted_indices = np.argsort(mean_shap)[::-1]
 
-    reduction_list = [32, 16]
-    for reduction in reduction_list:
+    
+    for reduction in args.reduce:
         top_indices = sorted_indices[:reduction]
         print(f"Top {reduction} indices:", top_indices)
         train_data = recreate_images(train_alpha_data, args, top_indices)

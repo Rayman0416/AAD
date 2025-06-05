@@ -14,12 +14,12 @@ from shap_wrapper import multi_run
 import utils as util
 
 if __name__ == "__main__":
-    multiple = 2
+    multiple = 1
     process = []
     path = "../KUL_single_single3"
     names = ['S' + str(i+1) for i in range(0, 16)]
     for name in names:
-        p = Process(target=multi_run, args=(name, path, 10, "./32c1s", 32))
+        p = Process(target=multi_run, args=(name, path, 10, "./32c1s"))
         p.start()
         process.append(p)
         util.monitor(process, multiple, 60)
