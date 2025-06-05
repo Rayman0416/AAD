@@ -1,0 +1,13 @@
+2025-06-04 23:50:37,055 - Starting multi-run with name: S2, data path: ../KUL_single_single3, number of runs: 10
+2025-06-04 23:50:59,752 - Starting multi-run with name: S2, data path: ../KUL_single_single3, number of runs: 10
+2025-06-05 00:01:43,026 - Run 1: Loss = 0.6607460884843022, Accuracy = 0.8671875, Reduced Loss = 1.5461712833493948, Reduced Accuracy = 0.70703125
+2025-06-05 00:11:56,203 - Run 2: Loss = 1.0416828845627606, Accuracy = 0.75390625, Reduced Loss = 0.8539003934711218, Reduced Accuracy = 0.78515625
+2025-06-05 00:22:00,220 - Run 3: Loss = 1.098553870455362, Accuracy = 0.79296875, Reduced Loss = 0.7710460536181927, Reduced Accuracy = 0.78125
+2025-06-05 00:31:35,512 - Run 4: Loss = 1.3084354065358639, Accuracy = 0.6875, Reduced Loss = 0.7066705692559481, Reduced Accuracy = 0.80078125
+2025-06-05 00:41:11,464 - Run 5: Loss = 2.885774831636809, Accuracy = 0.52734375, Reduced Loss = 4.796367376693524, Reduced Accuracy = 0.51171875
+2025-06-05 00:50:40,877 - Run 6: Loss = 0.8039631651481614, Accuracy = 0.78515625, Reduced Loss = 1.0081475703045726, Reduced Accuracy = 0.76953125
+2025-06-05 01:00:16,351 - Run 7: Loss = 0.9489260204136372, Accuracy = 0.74609375, Reduced Loss = 1.0330358259379864, Reduced Accuracy = 0.75
+2025-06-05 01:10:01,162 - Run 8: Loss = 0.3290594370337203, Accuracy = 0.87890625, Reduced Loss = 0.30397522263228893, Reduced Accuracy = 0.87890625
+2025-06-05 01:19:50,322 - Run 9: Loss = 1.4386794002493843, Accuracy = 0.75390625, Reduced Loss = 1.206284312531352, Reduced Accuracy = 0.67578125
+2025-06-05 01:29:39,643 - Run 10: Loss = 1.2706641843542457, Accuracy = 0.734375, Reduced Loss = 0.6992263104766607, Reduced Accuracy = 0.77734375
+2025-06-05 01:29:39,644 - Mean Loss: 1.1786, Mean Accuracy: 0.7527, Mean Reduced Loss: 1.2925, Mean Reduced Accuracy: 0.7437

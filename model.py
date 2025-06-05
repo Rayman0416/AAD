@@ -216,10 +216,10 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
     args.data_document_path = data_document_path
     args.ConType = ["No"]
     args.fs = 128
-    args.window_length = math.ceil(args.fs * 10)
+    args.window_length = math.ceil(args.fs * 5)
     args.overlap = 0.8
     args.batch_size = 32
-    args.max_epoch = 200
+    args.max_epoch = 100
     args.random_seed = time.time()
     args.image_size = 32
     args.people_number = 16
@@ -297,10 +297,10 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
 
     opt = RMSprop(lr=0.0003, decay=3e-4)
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
-    early_stopping = EarlyStopping(monitor='val_loss', patience=20, verbose=1, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True)
     # plot_model(model, to_file='model.png', show_shapes=True)
 
-    history = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2, callbacks=[early_stopping])
+    history = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
     loss, accuracy = model.evaluate(test_data, test_label)
     print(loss, accuracy)
 
@@ -329,7 +329,7 @@ def main(name="S1", data_document_path="../KUL_single_single3"):
     print("Recreated images shape:", train_data.shape)
 
     # retrain model with reduced features
-    history_reduced = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2, callbacks=[early_stopping])
+    history_reduced = model.fit(train_data, train_label, batch_size=args.batch_size, epochs=args.max_epoch, validation_split=args.vali_percent, verbose=2)
 
     loss_reduced, accuracy_reduced = model.evaluate(test_data, test_label)
 

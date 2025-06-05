@@ -1,0 +1,8 @@
+2025-06-05 07:57:28,873 - Starting multi-run with name: S11, data path: ../KUL_single_single3, number of runs: 10
+2025-06-05 08:06:36,607 - Run 1: Loss = 0.054750605719164014, Accuracy = 0.97265625, Reduced Loss = 0.2594952281797305, Reduced Accuracy = 0.91796875
+2025-06-05 08:16:09,635 - Run 2: Loss = 0.282982483622618, Accuracy = 0.9140625, Reduced Loss = 0.2626753880176693, Reduced Accuracy = 0.9375
+2025-06-05 08:25:42,065 - Run 3: Loss = 0.32558400090783834, Accuracy = 0.92578125, Reduced Loss = 0.41510670469142497, Reduced Accuracy = 0.87890625
+2025-06-05 08:35:16,434 - Run 4: Loss = 0.1799554709577933, Accuracy = 0.953125, Reduced Loss = 0.5219710734672844, Reduced Accuracy = 0.890625
+2025-06-05 08:44:56,609 - Run 5: Loss = 0.22059980558697134, Accuracy = 0.953125, Reduced Loss = 0.3401695102220401, Reduced Accuracy = 0.94140625
+2025-06-05 08:54:34,119 - Run 6: Loss = 0.17242212512064725, Accuracy = 0.97265625, Reduced Loss = 0.20487103099003434, Reduced Accuracy = 0.93359375
+2025-06-05 09:04:33,107 - Run 7: Loss = 0.9329047678038478, Accuracy = 0.8359375, Reduced Loss = 0.9750639613484964, Reduced Accuracy = 0.8515625
