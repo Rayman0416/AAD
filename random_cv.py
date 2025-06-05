@@ -4,6 +4,7 @@ import math
 import scipy.io as sio
 import numpy as np
 import shap
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -372,8 +373,8 @@ if __name__ == "__main__":
         explainer = shap.DeepExplainer(model, background)
 
         # Compute SHAP on the rest of the training set (or all of it)
-        X_train_tensor = torch.from_numpy(X_train).float().to(device)
-        shap_values_fold = explainer.shap_values(X_train_tensor)  # shape: (batch, time, channels)
+        X_test_tensor = torch.from_numpy(X_test[:100]).float().to(device)
+        shap_values_fold = explainer.shap_values(X_test_tensor)  # shape: (batch, time, channels)
         shap_values_fold = shap_values_fold.squeeze()  # remove singleton dims if needed
 
         all_shap_values.append(shap_values_fold)
@@ -467,9 +468,34 @@ if __name__ == "__main__":
             print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
 
         reduced_results[reduction] = shap_results
-        print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
-        print(f"\nMean Test Accuracy reduced: {np.mean(shap_results):.4f} ± {np.std(shap_results):.4f}")
+    
+    print(f"\nMean Test Accuracy: {np.mean(results):.4f} ± {np.std(results):.4f}")
+    print(f"Mean Test Accuracy reduced 32: {np.mean(reduced_results[32]):.4f} ± {np.std(reduced_results[32]):.4f}")
+    print(f"Mean Test Accuracy reduced 16: {np.mean(reduced_results[16]):.4f} ± {np.std(reduced_results[16]):.4f}")
+    
+    results_dict = {
+        "subject": [subject_nr],
+        "mean_accuracy": [np.mean(results)],
+        "std_accuracy": [np.std(results)],
+        "mean_accuracy_32": [np.mean(reduced_results[32])],
+        "std_accuracy_32": [np.std(reduced_results[32])],
+        "mean_accuracy_16": [np.mean(reduced_results[16])],
+        "std_accuracy_16": [np.std(reduced_results[16])]
+    }
 
+    # Create a DataFrame
+    df = pd.DataFrame(results_dict)
+
+    # Write or append to CSV
+    output_file = "accuracy_results.csv"
+    try:
+        existing_df = pd.read_csv(output_file)
+        updated_df = pd.concat([existing_df, df], ignore_index=True)
+        updated_df.to_csv(output_file, index=False, float_format="%.4f")
+    except FileNotFoundError:
+        df.to_csv(output_file, index=False, float_format="%.4f")
+
+    print(f"\nResults saved to {output_file}")
 
     # plt.imshow(mean_shap_per_pixel, cmap='hot')
     # plt.colorbar()
