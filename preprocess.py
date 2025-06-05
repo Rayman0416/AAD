@@ -1,7 +1,7 @@
 import numpy as np
 import math
 import mne
-from utils import *
+from utils_old import *
 from scipy.interpolate import griddata
 from sklearn.preprocessing import scale
 from scipy.signal import butter, filtfilt
