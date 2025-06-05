@@ -402,8 +402,8 @@ if __name__ == "__main__":
     
     # Run reduced-channel 32, 16 on the model
     reduced_results = {}
-    
-    for reduction in [32, 16]:
+    reduction_list = [32, 16]
+    for reduction in reduction_list:
         print(f"\nRunning reduced-channel experiment: top-{reduction} channels")
 
         X, reduced_channels = reduce_channels(original_values, mean_shap_per_pixel, channel_names, reduction=reduction)
@@ -486,11 +486,12 @@ if __name__ == "__main__":
         "subject": [subject_nr],
         "mean_accuracy": [np.mean(results)],
         "std_accuracy": [np.std(results)],
-        "mean_accuracy_32": [np.mean(reduced_results[32])],
-        "std_accuracy_32": [np.std(reduced_results[32])],
-        "mean_accuracy_16": [np.mean(reduced_results[16])],
-        "std_accuracy_16": [np.std(reduced_results[16])]
     }
+
+    # Add dynamic reductions
+    for reduction in reduction_list:
+        results_dict[f"mean_accuracy_{reduction}"] = [np.mean(reduced_results[reduction])]
+        results_dict[f"std_accuracy_{reduction}"] = [np.std(reduced_results[reduction])]
 
     # Create a DataFrame
     df = pd.DataFrame(results_dict)
