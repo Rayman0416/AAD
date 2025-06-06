@@ -1,5 +1,5 @@
 
-from temp import run_subject_analysis  # Update as needed
+from main import run_subject_analysis  # Update as needed
 
 def run_all_dtu_subjects():
     dataset = "DTU"
