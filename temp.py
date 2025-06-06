@@ -1,6 +1,4 @@
-import os
 import mne
-import math
 import scipy.io as sio
 import numpy as np
 import shap
@@ -10,128 +8,11 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from preprocess import *
 from model import *
+from load import *
 import pandas as pd
-    
-# Load in first 8 trials of eeg data for each subject and extract 2D electrode coordinates
-def load_kul(data_dir):
-    """
-    Load EEG data and labels from the KULeuven AAD dataset.
 
-    Args:
-        data_dir (str): Path to the dataset directory containing .mat files.
-
-    Returns:
-        subjects_data (list): A list of subjects, where each subject is a dictionary with:
-            - 'trials': A list of dictionaries, each containing:
-                - 'eeg': EEG signals of shape (min_length, features).
-                - 'label': Corresponding label (0 for 'L', 1 for 'R').
-    """
-    subjects_data = []
-    channel_names = []
-    min_length = (6 * 60) * 128  # 6 minutes truncate length (128 Hz)
-
-    for file_name in os.listdir(data_dir):
-        if file_name.endswith(".mat"):
-            file_path = os.path.join(data_dir, file_name)
-            mat_data = sio.loadmat(file_path, struct_as_record=False, squeeze_me=True)
-
-            if 'trials' not in mat_data:
-                print(f"Skipping {file_name}: 'trials' key not found.")
-                continue
-
-            trials = mat_data['trials']
-            if not isinstance(trials, (list, np.ndarray)):
-                trials = [trials]  # Ensure trials is iterable
-
-            # get channel position names
-            if len(channel_names) == 0:
-                trial = trials[0]
-                file_header = trial.FileHeader
-                channels = file_header.Channels
-                for channel in channels:
-                    channel_names.append(channel.Label)
-
-            subject_trials = []
-            for trial in trials:
-                # Skip the last 12 trials (experiment 3, repeated segments)
-                if trial.TrialID == 9:
-                    break
-
-                label_char = getattr(trial, 'attended_ear', None)
-                raw_data = getattr(trial, 'RawData', None)
-
-                if label_char not in ('L', 'R') or raw_data is None:
-                    print(f"Skipping trial in {file_name}: Missing 'attended_ear' or 'RawData'.")
-                    continue
-
-                eeg_data = getattr(raw_data, 'EegData', None)
-                if eeg_data is None or not isinstance(eeg_data, np.ndarray) or eeg_data.ndim != 2:
-                    print(f"Skipping trial in {file_name}: Invalid 'EegData' format.")
-                    continue
-
-                # Truncate EEG data
-                eeg_data_truncated = eeg_data[:min_length]
-
-                subject_trials.append({
-                    'eeg': eeg_data_truncated.astype(np.float32),
-                    'label': 1 if label_char == 'R' else 0
-                })
-
-            if subject_trials:
-                subjects_data.append({'name': file_name, 'trials': subject_trials})
-
-    if not subjects_data:
-        raise ValueError("No valid EEG data found.")
-
-    subjects_data.sort(key=lambda x: x['name'])
-
-    return subjects_data, channel_names
-
-def load_DTU(data_dir):
-    subjects_data = []
-    channel_names = []
-    
-    for file_name in os.listdir(data_dir):
-        if file_name.endswith("preproc128.mat"):
-            subject_trials = []
-            file_path = os.path.join(data_dir, file_name)
-            mat_data = sio.loadmat(file_path, struct_as_record=False, squeeze_me=True)
-            data = mat_data['data']
-
-            if len(channel_names) == 0:
-                channels = data.dim.chan.eeg[0]
-                for channel in channels:
-                    channel_names.append(channel)
-            
-            trial_labels = data.event.eeg
-            trial_eeg = data.eeg
-            
-            for eeg, label in zip(trial_eeg, trial_labels):
-                # re-reference eeg channels to the average of the mastoid channels
-                mastoid = eeg[:, -2:]
-                mastoid_avg = np.mean(mastoid, axis=1, keepdims=True)
-                eeg = eeg[:, :-2] # drop the last 2 (mastoid) channels
-                eeg = eeg - mastoid_avg
-
-                subject_trials.append({
-                    'eeg': eeg,
-                    'label': 1 if label.value == 2 else 0
-                })
-        
-            if subject_trials:
-                subjects_data.append({'name': file_name, 'trials': subject_trials})
-    
-    if not subjects_data:
-        raise ValueError("No valid EEG data found.")
-    
-    subjects_data.sort(key=lambda x: x['name'])
-    for subject in subjects_data:
-        print(f"Subject {subject['name']}")
-
-    return subjects_data, channel_names
 
 # Project EEG channels into 2D space using azim_proj
 def get_channel_pixel_mapping(channel_names, grid_size=32):
@@ -183,6 +64,7 @@ def group_DTU_trials(subject):
 
     return X, y, groups
 
+
 # Group window data into trials
 def group_KUL_trials(subject):
     X, y, groups = [], [], []
@@ -200,20 +82,6 @@ def group_KUL_trials(subject):
     
     return X, y, groups
 
-def create_stacked_input(windows, labels, stack_size=3):
-    
-    num_samples = windows.shape[0] - stack_size + 1
-    stacked = []
-    for i in range(num_samples):
-        stack = np.stack(windows[i:i + stack_size], axis=0)  # Shape: (stack_size, resolution, resolution)
-        stacked.append(stack)
-    print(f"stacked shape: {np.array(stacked).shape}")
-
-    labels = labels[stack_size - 1:]  # Adjust labels to match the stacked windows
-    assert len(stacked) == len(labels), "Mismatch in stacked data and labels length"
-
-
-    return np.array(stacked), labels  # Shape: (num_samples, stack_size, resolution, resolution)
 
 def preprocess(data, labels, channel_names, reduced_channels=None):
     data = compute_alpha_power(data)
@@ -227,7 +95,8 @@ def preprocess(data, labels, channel_names, reduced_channels=None):
     
     return data, labels
     
-def reduce_channels(original_values, shap_values, channel_names, reduction=48):
+
+def reduce_channels(original_values, shap_values, channel_names, reduction):
     """
     Reduce the number of channels in the SHAP values to a smaller set.
     
@@ -264,13 +133,7 @@ def reduce_channels(original_values, shap_values, channel_names, reduction=48):
 
     return original_values, top_channels
 
-
-
-
-
-
-
-def run_subject_analysis(dataset: str, subject_nr: int, data_KUL="./KUL", data_DTU="./DTU", save_plot=False):
+def run_subject_analysis(dataset: str, subject_nr: int, data_KUL="./KUL", data_DTU="./DTU", reduction_list=[32], save_plot=False):
     dataset = dataset.strip().upper()
 
     # Load the dataset
@@ -405,9 +268,8 @@ def run_subject_analysis(dataset: str, subject_nr: int, data_KUL="./KUL", data_D
 
     
     
-    # Run reduced-channel 32, 16 on the model
+    # Run all reduction variations in reduction_list
     reduced_results = {}
-    reduction_list = [32, 16]
     for reduction in reduction_list:
         print(f"\nRunning reduced-channel experiment: top-{reduction} channels")
 

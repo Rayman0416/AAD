@@ -6,7 +6,7 @@ def run_all_dtu_subjects():
 
     for subject_nr in range(1, 19):
         print(f"\n=== Running analysis for {dataset} subject {subject_nr} ===\n")
-        run_subject_analysis(dataset=dataset, subject_nr=subject_nr)
+        run_subject_analysis(dataset=dataset, subject_nr=subject_nr, reduction_list=[32, 16])
 
 if __name__ == "__main__":
     run_all_dtu_subjects()
